@@ -199,12 +199,13 @@ async def retrieve(
         seen_hashes.add(passage.content_hash)
         per_doc[passage.document_id] = per_doc.get(passage.document_id, 0) + 1
         ordinal += 1
+        src = getattr(passage.source, "value", passage.source)
         result.evidence.append(
             EvidenceItem(
                 id=passage.id,
                 ordinal=ordinal,
-                source=passage.source.value if hasattr(passage.source, "value") else passage.source,
-                site=_SITE.get(str(passage.source), str(passage.source)),
+                source=src,
+                site=_SITE.get(src, str(src).title()),
                 title=passage.page_title,
                 section_heading=passage.section_heading,
                 excerpt=_excerpt(passage.text),

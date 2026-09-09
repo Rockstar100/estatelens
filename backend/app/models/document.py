@@ -5,9 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.property import Source
+
+# Store/serialize enum *values* (plain strings), so `.source` is always "darglobal"
+# and never the enum object — matches how Property behaves.
+_ENUM_VALUES = ConfigDict(use_enum_values=True)
 
 
 class ExtractionMethod(str, Enum):
@@ -26,6 +30,8 @@ class ExtractionStatus(str, Enum):
 class Document(BaseModel):
     """One fetched public page after cleaning."""
 
+    model_config = _ENUM_VALUES
+
     id: str
     source: Source
     canonical_url: str
@@ -41,6 +47,8 @@ class Document(BaseModel):
 
 class Passage(BaseModel):
     """A retrievable chunk of a document."""
+
+    model_config = _ENUM_VALUES
 
     id: str
     document_id: str
@@ -69,6 +77,8 @@ class FailedPage(BaseModel):
 
 
 class CrawlRun(BaseModel):
+    model_config = _ENUM_VALUES
+
     id: str
     source: Source
     started_at: datetime
