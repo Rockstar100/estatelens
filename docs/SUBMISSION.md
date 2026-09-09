@@ -87,7 +87,7 @@ chat-UX reference. Everything else is original to this project.
 
 ## 6. Test results
 
-`python -m pytest` → **43 passed** (2026-09-09, local MongoDB).
+`python -m pytest` → **64 passed** (12 integration + 52 unit) (2026-09-09, local MongoDB).
 
 - Unit (pure functions, mocked inference): price/area parsing & missing values,
   allow-listed filter builder, NL→filter extraction, ordinal follow-up
@@ -141,6 +141,29 @@ chat-UX reference. Everything else is original to this project.
      local `estatelens.properties` was wiped once and **restored from
      `data/snapshots/full-20260909.jsonl`** — the recovery path, exercised for
      real.
+  5. A malformed client `context.filters` (e.g. `{"city": {"$ne": null}}`)
+     crashed the chat turn with an `internal` error. `retrieve()` now sanitises
+     it: only allow-listed scalar keys survive, Mongo operators / wrong types /
+     out-of-range values are dropped, worst case an empty filter. (15 tests)
+  6. Follow-ups did not carry structured filters forward — "show Riyadh
+     apartments" then "what about 3 bedrooms" reset instead of refining. The
+     chat now round-trips the previous turn's `applied_filters` through
+     `context.filters`, and the NLU rent/sale vocabulary was broadened so
+     "now show rentals" flips a carried `transaction_type`.
+  7. Explore's "Ask about this" and Compare's "Ask AI to compare" only appended
+     a user message and never sent it (dead prompt). A `pendingPrompt` in the
+     store is now consumed and sent once by ChatPage on arrival.
+  8. Evidence `site` badge showed `"Source.DARGLOBAL"` (a `str(enum)` quirk).
+     Fixed, and `Document`/`Passage`/`CrawlRun` now use `use_enum_values` so
+     `.source` is a plain string end to end.
+  9. Added security headers (CSP on HTML, `X-Frame-Options: DENY`, `nosniff`,
+     `Referrer-Policy`, `Permissions-Policy`); dropped unused deps `nh3`,
+     `tenacity`.
+
+API edge cases swept (all safe): oversize message / history → 422; empty or
+malformed body → 422; regex / `$where` / operator injection in filters and
+context → ignored, no crash; mid-stream client disconnect → server stays up;
+CORS preflight from an unknown origin → rejected.
 
 ## 7. Known limitations
 
