@@ -7,8 +7,8 @@ or Wasalt._
 
 - **App:** _pending Render service creation._ The multi-stage image **builds and
   runs**, its Docker `HEALTHCHECK` reports `healthy`, and it has been verified
-  end-to-end against **MongoDB Atlas** (`estatelens` DB, populated: 25
-  properties / 138 passages) and the live OpenRouter free model — grounded,
+  end-to-end against **MongoDB Atlas** (`estatelens` DB, populated: 26
+  properties / 149 passages) and the live OpenRouter free model — grounded,
   cited chat answers for both sources. `render.yaml` is ready; the only
   remaining step is creating the Render web service and pasting the same four
   secret env vars (already known-good locally). See §10.
@@ -38,8 +38,8 @@ From `python -m scripts.cli coverage`, collected **2026-09-09**:
 | Source | Documents | Properties (listing / development) | Cities represented |
 |---|---|---|---|
 | DarGlobal | 13 | 13 (0 / 13) | Jeddah, Riyadh, Dubai, London, Doha (records also cover Muscat, Benahavis, Costa del Sol, Al Marjan Island) |
-| Wasalt | 15 | 12 (12 / 0) | Riyadh, Jeddah, Madinah, Khobar, Dammam, Tabuk |
-| **Total** | **28 documents · 25 properties · 138 retrievable passages** | | |
+| Wasalt | 17 | 13 (13 / 0) | Riyadh, Jeddah, Madinah, Khobar, Dammam, Al Jumum, Khamis Mushait |
+| **Total** | **30 documents · 26 properties · 149 retrievable passages** | | |
 
 DarGlobal records are branded *developments* (The Astera, Marea, Tierra Viva,
 W Residences, Urban Oasis, Trump Tower Jeddah, Neptune, Les Vagues, Da Vinci
@@ -87,7 +87,7 @@ chat-UX reference. Everything else is original to this project.
 
 ## 6. Test results
 
-`python -m pytest` → **39 passed** (2026-09-09, local MongoDB).
+`python -m pytest` → **41 passed** (2026-09-09, local MongoDB).
 
 - Unit (pure functions, mocked inference): price/area parsing & missing values,
   allow-listed filter builder, NL→filter extraction, ordinal follow-up
@@ -118,6 +118,18 @@ chat-UX reference. Everything else is original to this project.
     real figure.
   - unsupported location (Manama) → *"Not listed in the collected source."*
   - missing field (bathrooms on a land plot) → declined.
+  - follow-up ("show Riyadh apts" → "only 3 bedrooms") → correctly narrowed.
+  - ordinal follow-up ("compare the first and second") → compared the two shown.
+- **Quota-exhaustion path verified live:** after ~50 test calls the OpenRouter
+  free daily budget ran out; the API returned a single `error` event, category
+  `quota_exhausted`, message *"this is an account limit … Try again later"* —
+  no fake answer, no retry loop, evidence/cards still delivered so DB browsing
+  continues. (Resets daily; add $10 of credit to raise it to 1000 req/day.)
+- **Bugs found and fixed during this pass:** (1) "Price: low to high" put
+  unpriced DarGlobal records first — now a two-key sort keeps null prices last
+  in both directions (`test_price_sort.py`). (2) One Wasalt sale listing carried
+  a token `SAR 2,500` price; the `< 10,000` sale-price guard now nulls it and
+  the data was re-scraped.
 
 ## 7. Known limitations
 
@@ -167,7 +179,7 @@ of re-crawling: `python -m scripts.cli import-snapshot ../data/snapshots/full-20
    the Render URL once assigned.
 4. Atlas → Network Access → allow Render's egress (or `0.0.0.0/0` for the demo).
 5. Deploy. `healthCheckPath` is `/api/health`. The Atlas DB is already populated
-   (25 properties / 138 passages), so the app is usable immediately.
+   (26 properties / 149 passages), so the app is usable immediately.
 
 ## 9. For the hiring team
 

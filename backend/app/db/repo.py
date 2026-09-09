@@ -200,10 +200,30 @@ async def query_properties(
 ) -> tuple[list[Property], int]:
     db = get_db()
     total = await db.properties.count_documents(mongo_filter)
+    skip = max(page - 1, 0) * page_size
+
+    price_dir = next((d for f, d in (sort or []) if f == "price_amount"), None)
+    if price_dir is not None:
+        # MongoDB sorts NULL before numbers; for a "price" sort the user wants
+        # priced records ordered and the unpriced ones last, either direction.
+        # A two-key sort (has-price, then price) keeps nulls last both ways
+        # without an out-of-range numeric sentinel.
+        pipeline = [
+            {"$match": mongo_filter},
+            {"$addFields": {"_hasprice": {"$cond": [{"$eq": ["$price_amount", None]}, 1, 0]}}},
+            {"$sort": {"_hasprice": 1, "price_amount": price_dir, "_id": 1}},
+            {"$skip": skip},
+            {"$limit": page_size},
+            {"$project": {"_hasprice": 0}},
+        ]
+        cursor = await db.properties.aggregate(pipeline)
+        items = [doc_to_property(d) async for d in cursor]
+        return items, total
+
     cursor = db.properties.find(mongo_filter)
     if sort:
         cursor = cursor.sort(sort)
-    cursor = cursor.skip(max(page - 1, 0) * page_size).limit(page_size)
+    cursor = cursor.skip(skip).limit(page_size)
     items = [doc_to_property(d) async for d in cursor]
     return items, total
 
