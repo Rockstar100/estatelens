@@ -43,7 +43,22 @@ from app.scrapers.normalize import (
 SITEMAP_URL = "https://darglobal.co.uk/sitemap.xml"
 BASE = "https://darglobal.co.uk"
 
-# Slugs that are definitely not developments.
+# Curated branded-development pages, checked to render real project "key facts".
+# Tried first so a short crawl still lands the actual projects rather than
+# marketing/landing pages that share the single-slug URL shape.
+_KNOWN_DEVELOPMENTS = [
+    "trump-tower-jeddah", "the-astera", "tierra-viva", "marea", "neptune",
+    "urban-oasis-by-missoni", "w-residences", "les-vagues", "davinci-tower-by-pagani",
+    "sea-la-vie", "the-mulliner", "marriott-residences-aida-oman", "aida-trump-villas",
+    "aida-coastal-investment-villas", "fairway-villas-aida-oman", "d-villas-at-jge",
+    "aida-trump-international-hotel", "aida-trump-international-apartments",
+    "aida-trump-international-cliff-villas", "sunrise-haven-luxury-villas",
+    "trump-international-hotel-and-tower-dubai", "trump-international-resort-maldives",
+    "amour-sans-detour", "amour-sans-detour-2", "the-great-escape-1-aida-oman",
+    "the-great-escape-2-aida-oman",
+]
+
+# Slugs that are definitely not developments (marketing / utility / editorial).
 _NON_PROJECT_SLUGS = {
     "about", "faq", "why-invest", "careers", "internships", "internship-application",
     "get-in-touch", "become-a-broker", "become-an-agent", "privacy-policy",
@@ -53,7 +68,10 @@ _NON_PROJECT_SLUGS = {
     "partners", "one-of-one", "insights", "blog", "press", "campaigns", "landing-page",
     "landingpage", "new-home-page", "live-all-in", "win-a-trip-to-dubai", "dg1",
     "aida-360", "aston-martin-media", "sohar-islamic", "luxury-golf-communities",
-    "why-invest", "pre-launch-trump-jeddah-tower",
+    "pre-launch-trump-jeddah-tower", "exclusive-plots", "invest-crypto", "invest-in-aida",
+    "tokenization", "dg-insignia-card", "darglobal-insignia-card",
+    "darglobal-exclusive-off-plan-investment-catalogue", "the-great-escape-1-aida-oman-terms",
+    "broker-contest-terms-conditions", "win-a-trip-to-dubai", "internships",
 }
 
 _INFO_SLUGS = ["about", "faq", "why-invest", "development-management", "hospitality"]
@@ -127,10 +145,18 @@ async def discover(client: httpx.AsyncClient, limit: int = 80) -> list[str]:
     resp.raise_for_status()
     locs = re.findall(r"<loc>([^<]+)</loc>", resp.text)
 
-    developments: list[str] = []
+    loc_set = {u.rstrip("/").lower() for u in locs}
+
+    known: list[str] = []
+    for slug in _KNOWN_DEVELOPMENTS:
+        cand = f"{BASE}/{slug}"
+        # accept whether or not it is in the sitemap (curated + verified to render)
+        if cand.lower() in loc_set or True:
+            known.append(cand)
+
+    heuristic_devs: list[str] = []
     categories: list[str] = []
     informational: list[str] = []
-
     for url in locs:
         path = url[len(BASE):].strip("/") if url.startswith(BASE) else url
         if not path:
@@ -139,22 +165,15 @@ async def discover(client: httpx.AsyncClient, limit: int = 80) -> list[str]:
         first = segments[0].lower()
         if first == "projects" and len(segments) >= 2:
             categories.append(url)
-        elif len(segments) == 1 and first not in _NON_PROJECT_SLUGS:
-            # branded development page (single slug, not a known utility page)
-            developments.append(url)
+        elif len(segments) == 1 and first not in _NON_PROJECT_SLUGS and first not in _KNOWN_DEVELOPMENTS:
+            heuristic_devs.append(url)
         elif first in ("blog", "insights", "press") and len(segments) >= 2:
             informational.append(url)
 
-    for slug in _INFO_SLUGS:
+    for slug in reversed(_INFO_SLUGS):
         informational.insert(0, f"{BASE}/{slug}")
 
-    # Balance the mix: developments first (most valuable), then categories, then a
-    # slice of informational pages.
-    ordered: list[str] = []
-    ordered += developments
-    ordered += categories
-    ordered += informational[: max(10, limit // 4)]
-
+    ordered = known + categories[:6] + heuristic_devs + informational[: max(6, limit // 5)]
     seen: set[str] = set()
     deduped = [u for u in ordered if not (u in seen or seen.add(u))]
     return deduped[:limit]

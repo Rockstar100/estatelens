@@ -21,10 +21,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from app.scrapers.base import ALLOWED_HOSTS, host_of
+
+# backend/ dir, so the worker subprocess can `import app` regardless of how the
+# CLI was launched.
+_BACKEND_DIR = str(Path(__file__).resolve().parents[2])
 
 try:  # pragma: no cover - ingestion environment only
     import crawl4ai  # noqa: F401
@@ -87,6 +93,9 @@ class BrowserFetcher:
         if host_of(url) not in ALLOWED_HOSTS:
             return RenderedPage(url, url, 0, "", ok=False, error="host not on allow-list")
 
+        env = dict(os.environ)
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = _BACKEND_DIR + (os.pathsep + existing if existing else "")
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
@@ -94,6 +103,8 @@ class BrowserFetcher:
             url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
+            cwd=_BACKEND_DIR,
+            env=env,
         )
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_PER_PAGE_TIMEOUT)

@@ -95,14 +95,19 @@ async def retrieve(
     properties: list[Property] = []
     if selected_ids:
         properties = await repo.get_properties(selected_ids)
-    if has_structured or (merged.text and not selected_ids):
+    if strong_structured or selected_ids or (merged.text and not selected_ids):
         page_items, _total = await repo.query_properties(
             mongo_filter, page=1, page_size=12, sort=sort_spec
         )
         for p in page_items:
             if p.id not in {x.id for x in properties}:
                 properties.append(p)
-    result.properties = properties[:12]
+    # Surface cards only when the user narrowed things down or the set is small
+    # enough to be useful — not a full dump for a "what does X say" question.
+    if selected_ids or strong_structured or 0 < len(properties) <= 6:
+        result.properties = properties[:6]
+    else:
+        result.properties = []
 
     # --- passage keyword search --------------------------------------
     search_terms = merged.text or user_text
