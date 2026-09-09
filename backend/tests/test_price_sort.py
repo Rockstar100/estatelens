@@ -2,19 +2,19 @@
 in both directions. Uses a temporary collection via the shared client.
 """
 
-import os
 from decimal import Decimal
 
 import pytest
 from bson.decimal128 import Decimal128
 
-pytestmark = pytest.mark.integration
+from tests.conftest import require_test_db
 
-os.environ.setdefault("MONGODB_DATABASE", "estatelens_sorttest")
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
 async def seeded():
+    require_test_db()
     from app.db import client, repo
 
     await client.connect()

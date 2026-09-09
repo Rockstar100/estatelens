@@ -87,7 +87,7 @@ chat-UX reference. Everything else is original to this project.
 
 ## 6. Test results
 
-`python -m pytest` → **41 passed** (2026-09-09, local MongoDB).
+`python -m pytest` → **43 passed** (2026-09-09, local MongoDB).
 
 - Unit (pure functions, mocked inference): price/area parsing & missing values,
   allow-listed filter builder, NL→filter extraction, ordinal follow-up
@@ -125,11 +125,22 @@ chat-UX reference. Everything else is original to this project.
   `quota_exhausted`, message *"this is an account limit … Try again later"* —
   no fake answer, no retry loop, evidence/cards still delivered so DB browsing
   continues. (Resets daily; add $10 of credit to raise it to 1000 req/day.)
-- **Bugs found and fixed during this pass:** (1) "Price: low to high" put
-  unpriced DarGlobal records first — now a two-key sort keeps null prices last
-  in both directions (`test_price_sort.py`). (2) One Wasalt sale listing carried
-  a token `SAR 2,500` price; the `< 10,000` sale-price guard now nulls it and
-  the data was re-scraped.
+- **Bugs found and fixed during the edge-case pass:**
+  1. "Price: low to high" put unpriced DarGlobal records first (Mongo sorts null
+     before numbers) — now a two-key aggregation sort keeps null prices last in
+     both directions. (`test_price_sort.py`)
+  2. `GET /api/properties?text=…` (the Explore search box) 500'd — there was no
+     text index on `properties`. Added a weighted text index + a regex fallback
+     for the window before the index finishes building. (`test_api.py`)
+  3. One Wasalt sale listing carried a token `SAR 2,500` price; the `< 10,000`
+     sale-price guard nulls it — Wasalt was re-scraped.
+  4. Two integration tests (`test_price_sort`, an earlier `test_api`) called
+     `delete_many` and could hit the real DB if `MONGODB_DATABASE` leaked from
+     the shell. `conftest.py` now *forces* the test DB name and a
+     `require_test_db()` guard refuses a non-test database. During the pass the
+     local `estatelens.properties` was wiped once and **restored from
+     `data/snapshots/full-20260909.jsonl`** — the recovery path, exercised for
+     real.
 
 ## 7. Known limitations
 

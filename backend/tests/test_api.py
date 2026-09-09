@@ -5,14 +5,12 @@ mocked OpenRouter stream so no quota is consumed.
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
 from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
-os.environ.setdefault("MONGODB_DATABASE", "estatelens_apitest")
 
 
 @pytest.fixture(scope="module")
