@@ -48,6 +48,19 @@ def test_properties_ok_shape(client):
     assert {"items", "total", "page", "has_more", "facets"} <= body.keys()
 
 
+def test_properties_text_search_does_not_500(client):
+    # regression: the Explore search box needs a text index on `properties`
+    r = client.get("/api/properties?text=seafront")
+    assert r.status_code == 200
+    r2 = client.get("/api/properties?text=zzz-no-such-term")
+    assert r2.status_code == 200 and r2.json()["total"] == 0
+
+
+def test_properties_injection_in_filters_is_safe(client):
+    for q in ("city=%27%20OR%201%3D1", "sort=%3Bdrop", "property_type=.%2A"):
+        assert client.get(f"/api/properties?{q}").status_code in (200, 422)
+
+
 def test_unknown_property_is_404(client):
     assert client.get("/api/properties/does-not-exist").status_code == 404
 

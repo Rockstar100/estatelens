@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
+from pymongo.errors import OperationFailure
 
 from app.config import get_settings
 from app.db import repo
@@ -64,9 +66,22 @@ async def list_properties(
     mongo_filter, sort_spec, _notes = build_mongo_filter(parsed)
     if "$text" in mongo_filter and sort_spec is None:
         sort_spec = [("_id", 1)]  # text index needs a deterministic tiebreak with skip/limit
-    items, total = await repo.query_properties(
-        mongo_filter, page=page, page_size=page_size, sort=sort_spec
-    )
+    try:
+        items, total = await repo.query_properties(
+            mongo_filter, page=page, page_size=page_size, sort=sort_spec
+        )
+    except OperationFailure as exc:
+        # Text index not built yet (e.g. right after a fresh deploy) — fall back
+        # to a safe case-insensitive substring match on title/description.
+        if "$text" not in mongo_filter or "text index" not in str(exc).lower():
+            raise
+        term = mongo_filter.pop("$text")["$search"]
+        rx = {"$regex": re.escape(term), "$options": "i"}
+        mongo_filter["$or"] = [{"title": rx}, {"description": rx}, {"district": rx}]
+        items, total = await repo.query_properties(
+            mongo_filter, page=page, page_size=page_size,
+            sort=None if sort_spec == [("_id", 1)] else sort_spec,
+        )
     facets = await repo.property_facets()
     return PropertyListResponse(
         items=items,

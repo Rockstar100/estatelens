@@ -32,6 +32,12 @@ PROPERTY_INDEXES = [
     IndexModel([("record_type", ASCENDING)], name="record_type"),
     IndexModel([("bedrooms", ASCENDING)], name="bedrooms"),
     IndexModel([("price_currency", ASCENDING), ("price_amount", ASCENDING)], name="price"),
+    IndexModel(
+        [("title", TEXT), ("description", TEXT), ("amenities", TEXT), ("district", TEXT)],
+        name="property_text",
+        weights={"title": 10, "district": 6, "amenities": 3, "description": 1},
+        default_language="english",
+    ),
 ]
 
 DOCUMENT_INDEXES = [
