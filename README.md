@@ -148,8 +148,8 @@ docker build -t estatelens .
 docker run --rm -p 8000:8000 \
   -e MONGODB_URI="<atlas-uri>" -e MONGODB_DATABASE=estatelens \
   -e OPENROUTER_API_KEY="<key>" \
-  -e OPENROUTER_MODEL="nvidia/nemotron-3-super-120b-a12b:free" \
-  -e OPENROUTER_FALLBACK_MODEL="nex-agi/nex-n2.5-mini:free" \
+  -e OPENROUTER_MODEL="nex-agi/nex-n2.5-mini:free" \
+  -e OPENROUTER_FALLBACK_MODEL="nvidia/nemotron-3-super-120b-a12b:free" \
   estatelens
 ```
 

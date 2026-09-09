@@ -61,18 +61,22 @@ not a claim of completeness.
 
 ## 4. Tested OpenRouter model
 
-- **Primary:** `nvidia/nemotron-3-super-120b-a12b:free`
-- **Fallback:** `nex-agi/nex-n2.5-mini:free` (different provider)
-- **Tested:** 2026-09-09 — a live streaming generation call against a grounded
-  prompt returned a correct, `[E#]`-cited answer in ~4 s. Several other
-  advertised `:free` slugs (llama-3.3-70b, deepseek-chat-v3.1, mistral-small,
-  qwen3-235b) now 404 with "unavailable for free — use the paid slug", so they
-  were rejected. The client only ever calls `:free` routes, never silently falls
-  back to a paid model, and surfaces an exhausted account quota as an account
-  limit (not retried, not disguised as a model problem).
-- **Citation spelling:** the primary model emits fullwidth `【E1】`; the backend
-  normalizes `[E1]` / `(E1)` / `【E1】` (including tokens split across stream
-  chunks) to the canonical `[E1]` the UI parses.
+- **Primary:** `nex-agi/nex-n2.5-mini:free` — clean, well-structured grounded
+  output (no leaked chain-of-thought), fast, 262K context.
+- **Fallback:** `nvidia/nemotron-3-super-120b-a12b:free` (different provider) —
+  also verified answering correctly with `[E#]` citations.
+- **Tested:** 2026-09-09 — live streaming generation calls against grounded
+  prompts returned correct, `[E#]`-cited answers for both DarGlobal and Wasalt
+  questions (see §6). Several other advertised `:free` slugs (llama-3.3-70b,
+  deepseek-chat-v3.1, mistral-small, qwen3-235b) now 404 with "unavailable for
+  free — use the paid slug", so they were rejected. The client only ever calls
+  `:free` routes, sends `reasoning.exclude=true`, never silently falls back to a
+  paid model, and surfaces an exhausted account quota as an account limit (not
+  retried, not disguised as a model problem).
+- **Citation spelling:** some free models emit `(E1)` or fullwidth `【E1】`; the
+  backend normalizes those (including tokens split across stream chunks, and
+  stray fullwidth wrappers around record ids) to the canonical `[E1]` the UI
+  parses, and strips any `<think>` block.
 
 ## 5. Open-source references
 
@@ -158,8 +162,8 @@ of re-crawling: `python -m scripts.cli import-snapshot ../data/snapshots/full-20
 2. Render → **New → Blueprint**, point at the repo (`render.yaml` is detected).
 3. Set the four secret env vars on the service (values already verified locally):
    `MONGODB_URI` (the raw Atlas SRV string — the app escapes it),
-   `OPENROUTER_API_KEY`, `OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free`,
-   `OPENROUTER_FALLBACK_MODEL=nex-agi/nex-n2.5-mini:free`. Set `APP_BASE_URL` to
+   `OPENROUTER_API_KEY`, `OPENROUTER_MODEL=nex-agi/nex-n2.5-mini:free`,
+   `OPENROUTER_FALLBACK_MODEL=nvidia/nemotron-3-super-120b-a12b:free`. Set `APP_BASE_URL` to
    the Render URL once assigned.
 4. Atlas → Network Access → allow Render's egress (or `0.0.0.0/0` for the demo).
 5. Deploy. `healthCheckPath` is `/api/health`. The Atlas DB is already populated

@@ -135,6 +135,62 @@ async def get_properties(ids: list[str]) -> list[Property]:
     return [by_id[i] for i in ids if i in by_id]
 
 
+_STOPWORDS = {
+    "the", "a", "an", "of", "in", "on", "at", "for", "and", "or", "to", "is", "are",
+    "what", "which", "where", "when", "who", "how", "does", "do", "did", "say", "says",
+    "tell", "me", "about", "show", "list", "give", "this", "that", "these", "those",
+    "with", "by", "from", "its", "it", "collected", "source", "sources", "project",
+    "projects", "property", "properties", "listing", "listings", "development",
+    "compare", "handover", "price", "prices", "located", "location", "date",
+}
+
+
+async def find_properties_by_title(text: str, *, limit: int = 3) -> list["Property"]:
+    """Best-effort: match distinctive words from the question against property
+    titles, so a question that names a project pulls that record. Case-insensitive
+    substring on the longest non-stopword tokens; falls back to nothing."""
+    import re as _re
+
+    tokens = [
+        t for t in _re.findall(r"[A-Za-z][A-Za-z'\-]{2,}", text)
+        if t.lower() not in _STOPWORDS
+    ]
+    tokens = sorted(set(tokens), key=len, reverse=True)[:6]
+    if not tokens:
+        return []
+    db = get_db()
+    ors = [{"title": {"$regex": _re.escape(tok), "$options": "i"}} for tok in tokens]
+    # require at least two distinct token hits for multi-word names, else one
+    pipeline = [
+        {"$match": {"$or": ors}},
+        {
+            "$addFields": {
+                "_hits": {
+                    "$size": {
+                        "$filter": {
+                            "input": [
+                                {
+                                    "$regexMatch": {
+                                        "input": {"$toLower": "$title"},
+                                        "regex": _re.escape(tok.lower()),
+                                    }
+                                }
+                                for tok in tokens
+                            ],
+                            "cond": "$$this",
+                        }
+                    }
+                }
+            }
+        },
+        {"$match": {"_hits": {"$gte": 2 if len(tokens) >= 2 else 1}}},
+        {"$sort": {"_hits": -1}},
+        {"$limit": limit},
+    ]
+    cursor = await db.properties.aggregate(pipeline)
+    return [doc_to_property(d) async for d in cursor]
+
+
 async def query_properties(
     mongo_filter: dict[str, Any],
     *,

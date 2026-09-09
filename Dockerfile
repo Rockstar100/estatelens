@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # ---------- Stage 1: build the React frontend ----------
 FROM node:20-bookworm-slim AS frontend
 WORKDIR /app/frontend

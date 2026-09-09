@@ -95,6 +95,15 @@ async def retrieve(
     properties: list[Property] = []
     if selected_ids:
         properties = await repo.get_properties(selected_ids)
+
+    # A question that names a project/listing should always pull that record so
+    # its structured facts (price, handover, area…) reach the model.
+    named = await repo.find_properties_by_title(user_text, limit=3)
+    named_ids = {p.id for p in named}
+    for p in named:
+        if p.id not in {x.id for x in properties}:
+            properties.append(p)
+
     if strong_structured or selected_ids or (merged.text and not selected_ids):
         page_items, _total = await repo.query_properties(
             mongo_filter, page=1, page_size=12, sort=sort_spec
@@ -102,9 +111,10 @@ async def retrieve(
         for p in page_items:
             if p.id not in {x.id for x in properties}:
                 properties.append(p)
+
     # Surface cards only when the user narrowed things down or the set is small
     # enough to be useful — not a full dump for a "what does X say" question.
-    if selected_ids or strong_structured or 0 < len(properties) <= 6:
+    if selected_ids or named_ids or strong_structured or 0 < len(properties) <= 6:
         result.properties = properties[:6]
     else:
         result.properties = []

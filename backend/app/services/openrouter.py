@@ -110,6 +110,9 @@ class OpenRouterClient:
             "max_tokens": self._s.openrouter_max_output_tokens,
             "temperature": 0.2,
             "usage": {"include": True},
+            # Keep reasoning tokens out of the visible answer for "thinking"
+            # models; ignored by models that don't reason.
+            "reasoning": {"exclude": True},
         }
         try:
             async with self._client.stream("POST", "/chat/completions", json=payload) as resp:

@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     # --- OpenRouter -------------------------------------------------------
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
     openrouter_model: str = Field(
-        default="nvidia/nemotron-3-super-120b-a12b:free", alias="OPENROUTER_MODEL"
+        default="nex-agi/nex-n2.5-mini:free", alias="OPENROUTER_MODEL"
     )
     openrouter_fallback_model: str = Field(
-        default="nex-agi/nex-n2.5-mini:free", alias="OPENROUTER_FALLBACK_MODEL"
+        default="nvidia/nemotron-3-super-120b-a12b:free", alias="OPENROUTER_FALLBACK_MODEL"
     )
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL"
