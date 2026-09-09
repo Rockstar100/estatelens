@@ -23,6 +23,7 @@ export function ChatPage() {
     appendMessage,
     updateLastAssistant,
     renameFromFirstMessage,
+    takePendingPrompt,
   } = useChat();
   const compare = useCompare();
   const drawer = useSourceDrawer();
@@ -69,18 +70,26 @@ export function ChatPage() {
       let id = activeId;
       if (!id || !conv) id = newConversation();
 
+      // read the live store (the closure's `conversations` can be a render behind)
+      const priorMsgs = (
+        useChat.getState().conversations.find((c) => c.id === id)?.messages ?? []
+      ).concat({ role: "user", content: clean } as ChatMessage);
+
       const userMsg: ChatMessage = { role: "user", content: clean };
       appendMessage(id, userMsg);
       appendMessage(id, { role: "assistant", content: "", pending: true });
       setInput("");
       setStreaming(true);
 
-      const priorMsgs = (conversations.find((c) => c.id === id)?.messages ?? []).concat(userMsg);
-      const lastAssistant = [...priorMsgs].reverse().find((m) => m.role === "assistant" && m.cards);
+      const lastAssistant = [...priorMsgs]
+        .reverse()
+        .find((m) => m.role === "assistant" && !m.error);
       const context = {
         selected_property_ids: compare.ids.slice(0, 3),
         last_result_ids: (lastAssistant?.cards ?? []).map((p) => p.id),
-        filters: {},
+        // carry the previous turn's structured filters so "only Riyadh" then
+        // "what about 3 bedrooms" refines rather than resets
+        filters: lastAssistant?.appliedFilters ?? {},
       };
 
       let acc = "";
@@ -88,7 +97,11 @@ export function ChatPage() {
         toWireMessages(priorMsgs),
         context,
         (e) => {
-          if (e.type === "evidence") updateLastAssistant(id!, { evidence: e.items });
+          if (e.type === "evidence")
+            updateLastAssistant(id!, {
+              evidence: e.items,
+              appliedFilters: e.applied_filters,
+            });
           else if (e.type === "cards") updateLastAssistant(id!, { cards: e.properties });
           else if (e.type === "delta") {
             acc += e.text;
@@ -126,6 +139,13 @@ export function ChatPage() {
       updateLastAssistant,
     ],
   );
+
+  // A prompt queued from Explore / Compare / Details: send it once on arrival.
+  useEffect(() => {
+    const queued = takePendingPrompt();
+    if (queued) send(queued);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stop = () => {
     abortRef.current?.();

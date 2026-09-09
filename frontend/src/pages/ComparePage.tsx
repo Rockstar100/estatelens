@@ -59,7 +59,7 @@ const ROWS: { label: string; render: (p: Property) => React.ReactNode; note?: st
 
 export function ComparePage() {
   const { ids, cache, remove, clear } = useCompare();
-  const { newConversation, appendMessage } = useChat();
+  const { askInChat } = useChat();
   const navigate = useNavigate();
   const [props, setProps] = useState<Record<string, Property>>({});
   const [loading, setLoading] = useState(false);
@@ -85,13 +85,12 @@ export function ComparePage() {
   const incomparablePrice = currencies.size > 1 || bases.size > 1;
 
   const askToCompare = () => {
-    const id = newConversation();
-    appendMessage(id, {
-      role: "user",
-      content: `Compare these properties using only the collected sources: ${resolved
+    if (!resolved.length) return;
+    askInChat(
+      `Compare these properties using only the collected sources: ${resolved
         .map((p) => `"${p.title}"`)
         .join(", ")}. Note anything that isn't directly comparable.`,
-    });
+    );
     navigate("/");
   };
 

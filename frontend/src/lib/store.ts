@@ -6,6 +6,8 @@ import { shortId } from "./utils";
 interface ChatState {
   conversations: Conversation[];
   activeId: string | null;
+  /** A prompt queued by Explore/Compare/Details; ChatPage sends it on mount. */
+  pendingPrompt: string | null;
   newConversation: () => string;
   setActive: (id: string) => void;
   deleteConversation: (id: string) => void;
@@ -13,13 +15,17 @@ interface ChatState {
   appendMessage: (id: string, msg: ChatMessage) => void;
   updateLastAssistant: (id: string, patch: Partial<ChatMessage>) => void;
   renameFromFirstMessage: (id: string) => void;
+  /** Queue a prompt and start a fresh conversation for it. */
+  askInChat: (prompt: string) => void;
+  takePendingPrompt: () => string | null;
 }
 
 export const useChat = create<ChatState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       conversations: [],
       activeId: null,
+      pendingPrompt: null,
       newConversation: () => {
         const id = shortId();
         const conv: Conversation = {
@@ -68,8 +74,33 @@ export const useChat = create<ChatState>()(
             return { ...c, title: first.content.slice(0, 48) + (first.content.length > 48 ? "…" : "") };
           }),
         })),
+      askInChat: (prompt) => {
+        const trimmed = prompt.trim().slice(0, 4000);
+        if (!trimmed) return;
+        const id = shortId();
+        const conv: Conversation = {
+          id,
+          title: "New conversation",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages: [],
+        };
+        set((s) => ({
+          conversations: [conv, ...s.conversations],
+          activeId: id,
+          pendingPrompt: trimmed,
+        }));
+      },
+      takePendingPrompt: () => {
+        const p = get().pendingPrompt;
+        if (p) set({ pendingPrompt: null });
+        return p;
+      },
     }),
-    { name: "estatelens.conversations" },
+    {
+      name: "estatelens.conversations",
+      partialize: (s) => ({ conversations: s.conversations, activeId: s.activeId }),
+    },
   ),
 );
 

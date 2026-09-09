@@ -38,6 +38,25 @@ def test_parse_price_never_zero_for_unknown():
     assert a is None  # not Decimal(0)
 
 
+def test_parse_price_rejects_absurd_figures():
+    assert parse_price("100000000000000")[0] is None  # 100 trillion → mis-parse
+    assert parse_price("SAR 999,999,999,999")[0] is None
+    assert parse_price("SAR 250,000,000")[0] == Decimal("250000000")  # plausible high-end kept
+
+
+@pytest.mark.parametrize(
+    "text,basis",
+    [
+        ("SAR 35000 / year", PriceBasis.ANNUAL_RENT),
+        ("SAR 35000 /year", PriceBasis.ANNUAL_RENT),
+        ("SAR 5000 / month", PriceBasis.MONTHLY_RENT),
+        ("35000 per annum", PriceBasis.ANNUAL_RENT),
+    ],
+)
+def test_rent_period_detected_with_spacing(text, basis):
+    assert parse_price(text)[2] == basis
+
+
 def test_parse_area():
     v, unit, original = parse_area("Built-up area 164.95 sqm")
     assert v == Decimal("164.95")

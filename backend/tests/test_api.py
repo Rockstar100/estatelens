@@ -27,6 +27,12 @@ def test_health_needs_no_quota(client):
     assert r.json()["status"] == "ok"
 
 
+def test_security_headers_present(client):
+    r = client.get("/api/health")
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert r.headers.get("x-frame-options") == "DENY"
+
+
 def test_readiness_reports_checks(client):
     r = client.get("/api/readiness")
     assert r.status_code in (200, 503)

@@ -139,6 +139,7 @@ export interface ChatMessage {
   evidence?: EvidenceItem[];
   cards?: Property[];
   citations?: string[];
+  appliedFilters?: Record<string, unknown>;
   error?: { category: string; message: string };
   model?: string | null;
   pending?: boolean;

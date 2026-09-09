@@ -90,9 +90,9 @@ def detect_currency(text: str) -> str | None:
 
 def detect_basis(text: str) -> PriceBasis:
     low = text.lower()
-    if re.search(r"per month|/month|monthly|/mo\b|شهري", low):
+    if re.search(r"per\s*month|/\s*month|monthly|/\s*mo\b|شهري", low):
         return PriceBasis.MONTHLY_RENT
-    if re.search(r"per year|/year|yearly|annually|per annum|p\.a\.|سنوي", low):
+    if re.search(r"per\s*year|/\s*year|/\s*yr\b|yearly|annually|per\s*annum|p\.a\.|سنوي", low):
         return PriceBasis.ANNUAL_RENT
     if re.search(r"starting (from|at)|from\s*(aed|sar|usd|gbp|eur|\$|£|€)|prices? from|abfrom", low):
         return PriceBasis.STARTING
@@ -122,8 +122,9 @@ def parse_price(text: str | None) -> tuple[Decimal | None, str | None, PriceBasi
     suffix = (m.group(2) or "").lower()
     if suffix in _MULT:
         amount *= _MULT[suffix]
-    # guard against obvious non-prices
-    if amount < 100:
+    # guard against obvious non-prices: too small to be a real property price,
+    # or an absurd figure from a mis-parse (no real listing is > ~100 billion).
+    if amount < 100 or amount > Decimal("1e11"):
         return None, currency, basis, original
     return amount, currency, basis, original
 

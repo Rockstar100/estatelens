@@ -12,7 +12,10 @@ Method (documented plainly for the Sources page):
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+
+from pydantic import ValidationError
 
 from app.config import get_settings
 from app.db import repo
@@ -43,14 +46,50 @@ class RetrievalResult:
         return [e.id for e in self.evidence]
 
 
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
 def _excerpt(text: str, limit: int = 320) -> str:
-    text = " ".join(text.split())
+    # Defence in depth: strip any stray HTML tags from source text before it
+    # goes out in an `evidence` event (the client also sanitises, and renders
+    # excerpts as plain text, but keep the wire clean).
+    text = " ".join(_TAG_RE.sub("", text).split())
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
 async def _known_cities() -> list[str]:
     facets = await repo.property_facets()
     return [f["value"] for f in facets.get("cities", [])]
+
+
+# Only these keys are honoured from a client-supplied context filter.
+_CONTEXT_FILTER_KEYS = {
+    "text", "source", "record_type", "country", "city", "district",
+    "transaction_type", "property_type", "bedrooms", "bedrooms_min",
+    "budget_max", "budget_min", "currency", "price_basis", "sort",
+}
+
+
+def _safe_context_filter(raw: object) -> PropertyFilter:
+    """Never raises: pick only allow-listed keys with scalar values, then try to
+    validate; on any failure, drop offending keys one at a time; worst case,
+    return an empty filter."""
+    if not isinstance(raw, dict):
+        return PropertyFilter()
+    clean = {
+        k: v
+        for k, v in raw.items()
+        if k in _CONTEXT_FILTER_KEYS and isinstance(v, (str, int, float, bool)) and not isinstance(v, bool)
+    }
+    while True:
+        try:
+            return PropertyFilter.model_validate(clean)
+        except ValidationError as exc:
+            bad = {str(e["loc"][0]) for e in exc.errors() if e.get("loc")}
+            if not bad or not (clean.keys() & bad):
+                return PropertyFilter()
+            for k in bad:
+                clean.pop(k, None)
 
 
 async def retrieve(
@@ -63,12 +102,18 @@ async def retrieve(
     settings = get_settings()
     limit = settings.retrieval_passage_limit
 
-    base_filter = PropertyFilter.model_validate(context_filters or {})
+    # Client-supplied context is advisory: a malformed `filters` object must not
+    # break the turn — only keys that validate against the allow-listed schema
+    # are kept, everything else is dropped.
+    base_filter = _safe_context_filter(context_filters)
     turn_filter = extract_filter(user_text, known_cities=await _known_cities())
     merged = merge_filters(base_filter, turn_filter)
 
     # --- ordinal / explicit property selection --------------------------
-    selected_ids = list(selected_property_ids or [])
+    selected_ids = [
+        s for s in (str(x).strip() for x in (selected_property_ids or []))
+        if s and len(s) <= 200
+    ][:3]
     ordinal_ids = resolve_ordinal_reference(user_text, last_result_ids or [])
     for i in ordinal_ids:
         if i not in selected_ids:

@@ -68,8 +68,29 @@ _RATE_LIMIT_EXEMPT = (
 )
 
 
+# A tight CSP: the SPA is fully self-hosted (no CDN, no inline scripts after the
+# Vite build), talks only to its own origin, and is never meant to be framed.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self'; "
+    "font-src 'self' data:; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+}
+
+
 @app.middleware("http")
-async def _rate_limit_mw(request: Request, call_next):
+async def _security_and_rate_limit_mw(request: Request, call_next):
     path = request.url.path
     if path.startswith("/api/") and not path.startswith(_RATE_LIMIT_EXEMPT):
         allowed, retry_after = api_limiter.check(client_key(request))
@@ -79,7 +100,14 @@ async def _rate_limit_mw(request: Request, call_next):
                 status_code=429,
                 headers={"Retry-After": str(int(retry_after) + 1)},
             )
-    return await call_next(request)
+    response = await call_next(request)
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    # CSP only on document responses (not JSON/SSE), to keep it simple.
+    ctype = response.headers.get("content-type", "")
+    if ctype.startswith("text/html"):
+        response.headers.setdefault("Content-Security-Policy", _CSP)
+    return response
 
 
 app.include_router(health.router, prefix="/api")

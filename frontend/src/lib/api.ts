@@ -94,7 +94,19 @@ export function streamChat(
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
-        const detail = await res.text().catch(() => res.statusText);
+        let detail = "";
+        try {
+          const raw = await res.text();
+          try {
+            detail = JSON.parse(raw).detail ?? "";
+          } catch {
+            detail = raw;
+          }
+        } catch {
+          detail = res.statusText;
+        }
+        if (typeof detail !== "string") detail = JSON.stringify(detail);
+        detail = detail.replace(/<[^>]*>/g, "").trim().slice(0, 200);
         onEvent({
           type: "error",
           category: res.status === 429 ? "rate_limited" : "internal",

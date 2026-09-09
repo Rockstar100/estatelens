@@ -70,9 +70,14 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
         data["source"] = Source.WASALT
 
     # --- transaction type ------------------------------------------
-    if re.search(r"\b(for rent|to rent|rental|renting|lease)\b", lowered):
+    if re.search(
+        r"\b(for rent|to rent|rent(?:al|als|ed|ing)?|leas(?:e|ing)|to let|for hire)\b",
+        lowered,
+    ):
         data["transaction_type"] = TransactionType.RENT
-    elif re.search(r"\b(for sale|to buy|buying|purchase|buy a)\b", lowered):
+    elif re.search(
+        r"\b(for sale|to buy|buy(?:ing)?|purchas(?:e|ing)|on sale|to own)\b", lowered
+    ):
         data["transaction_type"] = TransactionType.SALE
 
     # --- record type ---------------------------------------------

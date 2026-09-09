@@ -18,7 +18,7 @@ type FilterKey =
 export function ExplorePage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const { newConversation, appendMessage } = useChat();
+  const { askInChat } = useChat();
 
   const [items, setItems] = useState<Property[]>([]);
   const [facets, setFacets] = useState<Facets>({});
@@ -89,11 +89,9 @@ export function ExplorePage() {
   };
 
   const askAbout = (p: Property) => {
-    const id = newConversation();
-    appendMessage(id, {
-      role: "user",
-      content: `Tell me about "${p.title}" from ${p.source}. What is in the collected source about its price, location and amenities?`,
-    });
+    askInChat(
+      `Tell me about "${p.title}" from ${p.source}. What is in the collected source about its price, location and amenities?`,
+    );
     navigate("/");
   };
 
