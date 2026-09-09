@@ -1,0 +1,9 @@
+# Additional dependencies for the LOCAL ingestion step only.
+# These are NOT installed into the deployed web image (no browser in prod).
+# Install with:  pip install -r requirements.txt -r requirements-ingest.txt
+#                python -m playwright install --with-deps chromium
+
+-r requirements.txt
+
+crawl4ai==0.4.24
+playwright==1.49.1

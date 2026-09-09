@@ -1,0 +1,29 @@
+# Render Blueprint — single Docker web service on the free plan.
+# The MongoDB Atlas connection string and OpenRouter key are set as
+# dashboard environment variables (sync: false), never committed.
+services:
+  - type: web
+    name: estatelens
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: false
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MONGODB_DATABASE
+        value: estatelens
+      - key: APP_BASE_URL
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        sync: false
+      - key: OPENROUTER_FALLBACK_MODEL
+        sync: false

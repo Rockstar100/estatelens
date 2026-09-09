@@ -1,0 +1,320 @@
+{
+ "status": true,
+ "data": {
+  "videoThumbnail": null,
+  "leadContactInfo": {
+   "arMessageBody": "للتواصل مع TARIQ BIJAD, يرجى إدخال رقم جوالك ",
+   "ownerName": "طارق بن بجاد بن صويلح المطيري",
+   "arMessageTitle": "تسجيل الدخول",
+   "enMessageTitle": "Login to your account",
+   "enMessageBody": "To contact TARIQ BIJAD, please fill in your details "
+  },
+  "propertyOwner": {
+   "arCmpName": null,
+   "companyName": "",
+   "userCapacity": "individual_owner",
+   "enCmpName": null,
+   "resEmployee": null,
+   "arFatherName": "بجاد",
+   "regaAuthorizationNumber": null,
+   "cmpLogoUrl": "",
+   "enUserRole": "Landlord",
+   "arUserRole": "مالك",
+   "postedAs": 47,
+   "regaAdvertiserNumber": null,
+   "managedBy": "TARIQ BIJAD",
+   "brand": null,
+   "falExpiryDate": "Invalid Date",
+   "licenseExpired": false,
+   "showInterestCta": false
+  },
+  "isVerified": false,
+  "external360Link": "",
+  "isAuction": false,
+  "isRegaProp": false,
+  "isUpdated": false,
+  "externalVideoLink": "",
+  "score": 5,
+  "isApproxLocation": false,
+  "videoUrl": [],
+  "reservation": null,
+  "id": 140463,
+  "updatedAt": "2026-05-10T11:02:06.699Z",
+  "publishedAt": "2026-05-10T11:02:06.656Z",
+  "verificationStatus": {
+   "rega": {
+    "isPawned": false,
+    "obligationsOnTheProperty": ""
+   },
+   "wathiq": {
+    "isCondtrained": null,
+    "isHalt": null,
+    "isPawned": null,
+    "isTestament": null
+   }
+  },
+  "regaMojDesc": "",
+  "streetInfo": {
+   "streetWidth": 18
+  },
+  "contactDetails": {},
+  "fullDarReference": "42949-SAU-RE-091022",
+  "classificationData": [
+   {
+    "classificationScore": null,
+    "classificationName": null,
+    "name": "1778410914622-ad_qr-14.png"
+   }
+  ],
+  "propIdentityTypeId": 95,
+  "packageData": {
+   "packageScore": 0,
+   "subsPkg": null,
+   "promotedAt": null
+  },
+  "darReference": "091022",
+  "compoundDetails": {},
+  "location": {
+   "lon": "50.023921696836",
+   "lat": "26.4292940928024"
+  },
+  "monthlyRentEMI": 3208,
+  "rizeMonthlyRentEMI": 3354,
+  "aqsatMonthlyRentEMI": 3296,
+  "attributes": [
+   {
+    "key": "noOfBedrooms",
+    "name": "Bedrooms",
+    "value": 3,
+    "image": "noofbedrooms.png",
+    "iconClass": "bedroom"
+   },
+   {
+    "key": "noOfBathrooms",
+    "name": "Bathrooms",
+    "value": 3,
+    "image": "noofbathrooms.png",
+    "iconClass": "bathroom"
+   },
+   {
+    "key": "noOfGuestrooms",
+    "name": "Guest Room",
+    "value": 1,
+    "image": "noofguestrooms.png",
+    "iconClass": "guest-room"
+   },
+   {
+    "key": "furnishingType",
+    "name": "Furniture",
+    "value": "Un-Furnished",
+    "image": "furnishingtype.png",
+    "iconClass": "furniture"
+   },
+   {
+    "key": "builtUpArea",
+    "name": "Built-Up Area",
+    "value": "164.95",
+    "image": "builtuparea.png",
+    "unit": "SQM",
+    "iconClass": "builtup-area"
+   }
+  ],
+  "iconBaseURL": "https://assets.wasalt.com",
+  "managedById": 55,
+  "propertyRegionId": 56,
+  "propertyInfo": {
+   "currencyType": "SAR",
+   "country": "Saudi Arabia",
+   "propertyMainType": "Residential",
+   "address": "Al Noor, Aldammam",
+   "breadCrumbs": [
+    {
+     "subtitle": "Saudi Arabia",
+     "reference_url": "rent/search?type=residential&countryId=1&property_types=39&propertyTypeData=apartment",
+     "id": 222995,
+     "title": "Apartments for Rent in Saudi",
+     "type": "link",
+     "slug": "apartments-for-rent-in-dammam-an-nur",
+     "url": "apartments-for-rent-in-saudi-arabia"
+    },
+    {
+     "subtitle": "Aldammam",
+     "reference_url": "rent/search?type=residential&countryId=1&cityId=328&property_types=39&propertyTypeData=apartment",
+     "id": 222994,
+     "title": "Apartments for Rent in Dammam",
+     "type": "text",
+     "slug": "apartments-for-rent-in-dammam-an-nur",
+     "url": "apartments-for-rent-in-dammam"
+    },
+    {
+     "subtitle": "Al Noor",
+     "reference_url": null,
+     "id": 222993,
+     "title": "Apartments for Rent in An Nur",
+     "type": "text",
+     "slug": "apartments-for-rent-in-dammam-an-nur",
+     "url": "apartments-for-rent-in-dammam-an-nur"
+    }
+   ],
+   "city": "Aldammam",
+   "propertySubType": "Apartment",
+   "furnishingType": "Un-Furnished",
+   "facingType": null,
+   "description": "<p>Un-Furnished Family Apartment for Rent in Al Noor, Aldammam</p>\r\n<p>Built up Area: 164.95 SQM</p>\r\n<p>Property Floor : 1</p>\r\n<p>Apartment is located on 1 street, North with 18 m width</p>\r\n<p>The property has 1 floor, 3 bedrooms, 3 bathrooms, 1 guest room</p>\r\n<p>Apartment has electricity and water Connections</p>\r\n<p>Building year: 2022</p>\r\n<p>Apartment is: Un-Furnished</p>\r\n<p>Property amenities:</p>\r\n<p>&nbsp; - &nbsp; Terrace</p>\r\n<p>Price: 35000 SAR</p>",
+   "title": "3 Bedroom(s) Apartment for Rent",
+   "unitType": "SQM",
+   "possessionType": "Ready",
+   "zone": "Al Noor",
+   "propertyName": "Apartment for Rent",
+   "slug": "3-bedrooms-apartment-rent-140463",
+   "territory": null,
+   "tags": [
+    {
+     "name": "For Rent"
+    },
+    {
+     "name": "Un-Furnished"
+    }
+   ],
+   "propertyFor": "rent",
+   "salePrice": "",
+   "expectedRent": 35000,
+   "conversionPrice": 35000,
+   "conversionUnit": "SAR",
+   "contactDetails": {
+    "DAAO_TEAM_WHATSAPP": "+966 53 388 5500",
+    "DAAO_TEAM_EMAIL": "admin@daralarkanonline.com",
+    "ADMIN_EMAIL": "admin@daralarkanonline.com",
+    "DAAO_TEAM_PHONE": "800 123 3227",
+    "FROM_EMAIL": "noreply@wasalt.com"
+   },
+   "otherCharges": {
+    "brokerage": "",
+    "securityDesposit": null
+   },
+   "expectedRentType": "/Year",
+   "expectedMonthlyRentType": "/Month",
+   "projectId": null,
+   "countryId": 1,
+   "districId": 3251,
+   "districtId": 3251,
+   "district": "Al Noor",
+   "cityId": 328,
+   "mainTypeId": 2,
+   "statusTypeId": 505,
+   "statusTypeSlug": "approved",
+   "propertySubTypeSlug": "apartment",
+   "alternateSlug": "شقة-ب-3-غرف-140463",
+   "rentFreq": {
+    "yearly": {
+     "enCurrencyType": "SAR",
+     "default_freq": true,
+     "amount": 35000,
+     "arCurrencyType": "ر.س",
+     "freq": "yearly"
+    }
+   },
+   "propertyMainTypeSlug": "residential",
+   "regaGuaranteeDuration": "-",
+   "averageSalePriceLowerPercentage": null
+  },
+  "regaVerifiedInfo": [],
+  "priceValuation": {
+   "lower_bound": {},
+   "upper_bound": {}
+  },
+  "barter": {
+   "isEnabled": false,
+   "sellerNote": null
+  },
+  "additionalAttributes": [
+   {
+    "key": "propertyMainType",
+    "label": "Property usage",
+    "value": "Residential"
+   },
+   {
+    "key": "propertyStreetWidth",
+    "label": "Street width",
+    "value": "18 m"
+   },
+   {
+    "key": "electricityMeter",
+    "label": "Electricity",
+    "value": "Yes"
+   },
+   {
+    "key": "waterMeter",
+    "label": "Water",
+    "value": "Yes"
+   },
+   {
+    "key": "noOfFloors",
+    "label": "Total Floors",
+    "value": 1
+   },
+   {
+    "key": "floorNumber",
+    "label": "Property Floor",
+    "value": 1
+   },
+   {
+    "key": "noOfParkings",
+    "label": "Number of Parkings",
+    "value": 1
+   },
+   {
+    "key": "borderEast",
+    "label": "Border from East",
+    "unit": "m"
+   },
+   {
+    "key": "borderWest",
+    "label": "Border from West",
+    "unit": "m"
+   },
+   {
+    "key": "borderNorth",
+    "label": "Border from North",
+    "unit": "m"
+   },
+   {
+    "key": "borderSouth",
+    "label": "Border from South",
+    "unit": "m"
+   },
+   {
+    "key": "lengthEast",
+    "label": "Length from East",
+    "unit": "m"
+   },
+   {
+    "key": "lengthWest",
+    "label": "Length from West",
+    "unit": "m"
+   },
+   {
+    "key": "lengthNorth",
+    "label": "Length from North",
+    "unit": "m"
+   },
+   {
+    "key": "lengthSouth",
+    "label": "Length from South",
+    "unit": "m"
+   },
+   {
+    "key": "regaGuaranteeDuration",
+    "label": "Guarantees and their Duration",
+    "value": "-",
+    "fullWidth": true
+   }
+  ],
+  "ageOfListing": "Listed 121 days ago",
+  "views": {
+   "count": 21,
+   "days": 7
+  }
+ },
+ "message": "Successful operation"
+}

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+*.local
+
+# Build artifact: the SPA is compiled into the image by the Dockerfile
+backend/static/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# AI agent tooling
+.agents/
+.claude/
+skills-lock.json
+
+# Runtime
+*.log
+data/snapshots/*.jsonl
+!data/snapshots/.gitkeep
+!data/snapshots/sample-*.jsonl
+
+# Crawl4AI / Playwright
+.crawl4ai/

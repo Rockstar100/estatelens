@@ -1,0 +1,58 @@
+"""Liveness and readiness. Neither consumes model quota."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Response
+
+from app import __version__
+from app.config import get_settings
+from app.db import client as db_client
+from app.db import repo
+from app.models.api import HealthResponse, ReadinessCheck, ReadinessResponse
+
+router = APIRouter(tags=["health"])
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health() -> HealthResponse:
+    return HealthResponse(version=__version__, time=datetime.now(timezone.utc))
+
+
+@router.get("/readiness", response_model=ReadinessResponse)
+async def readiness(response: Response) -> ReadinessResponse:
+    settings = get_settings()
+    checks: list[ReadinessCheck] = []
+
+    try:
+        await db_client.ping()
+        checks.append(ReadinessCheck(name="mongodb", ok=True, detail="reachable"))
+    except Exception as exc:  # noqa: BLE001
+        checks.append(ReadinessCheck(name="mongodb", ok=False, detail=f"unreachable: {exc}"))
+
+    checks.append(
+        ReadinessCheck(
+            name="openrouter_config",
+            ok=settings.openrouter_configured,
+            detail="OPENROUTER_API_KEY present" if settings.openrouter_configured else "missing key",
+        )
+    )
+
+    try:
+        counts = await repo.collection_counts()
+        has_data = counts["properties"] > 0 and counts["passages"] > 0
+        checks.append(
+            ReadinessCheck(
+                name="indexed_data",
+                ok=has_data,
+                detail=f"{counts['properties']} properties, {counts['passages']} active passages",
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        checks.append(ReadinessCheck(name="indexed_data", ok=False, detail=str(exc)))
+
+    ready = all(c.ok for c in checks)
+    if not ready:
+        response.status_code = 503
+    return ReadinessResponse(ready=ready, checks=checks, time=datetime.now(timezone.utc))

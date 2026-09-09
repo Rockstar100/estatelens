@@ -1,0 +1,239 @@
+{
+ "status": true,
+ "data": {
+  "videoThumbnail": null,
+  "leadContactInfo": {
+   "arMessageBody": "للتواصل مع شركة مايا للتطوير والاستثمار العقاري, يرجى إدخال رقم جوالك ",
+   "ownerName": "سلطان بن صالح بن عبدالعزيز السالم",
+   "arMessageTitle": "تسجيل الدخول",
+   "enMessageTitle": "Login to your account",
+   "enMessageBody": "To contact MAYA real estate and investment Co. Ltd. , please fill in your details "
+  },
+  "propertyOwner": {
+   "arCmpName": "شركة مايا للتطوير والاستثمار العقاري",
+   "companyName": "",
+   "userCapacity": "company_broker",
+   "enCmpName": "MAYA real estate and investment Co. Ltd. ",
+   "arFatherName": "صالح",
+   "regaAuthorizationNumber": null,
+   "cmpLogoUrl": "https://cdn.wasalt.com/images/profile-filled-logo.png",
+   "enUserRole": null,
+   "arUserRole": null,
+   "postedAs": 11,
+   "regaAdvertiserNumber": null,
+   "managedBy": null,
+   "brand": "MAYA real estate and investment Co. Ltd. ",
+   "falExpiryDate": "Invalid Date",
+   "licenseExpired": false,
+   "showInterestCta": true
+  },
+  "isVerified": false,
+  "external360Link": null,
+  "isAuction": false,
+  "isRegaProp": false,
+  "isUpdated": false,
+  "externalVideoLink": null,
+  "score": 0,
+  "isApproxLocation": false,
+  "videoUrl": [],
+  "reservation": null,
+  "id": 5743817,
+  "updatedAt": "2025-03-17T10:51:24.890Z",
+  "publishedAt": null,
+  "verificationStatus": {
+   "rega": {
+    "isPawned": false,
+    "obligationsOnTheProperty": ""
+   },
+   "wathiq": {
+    "isCondtrained": null,
+    "isHalt": null,
+    "isPawned": null,
+    "isTestament": null
+   }
+  },
+  "regaMojDesc": "",
+  "streetInfo": {},
+  "contactDetails": {},
+  "fullDarReference": "199702-SAU-BU-724856",
+  "propIdentityTypeId": 95,
+  "packageData": {
+   "packageScore": -5,
+   "subsPkg": null,
+   "promotedAt": null
+  },
+  "darReference": "724856",
+  "compoundDetails": {},
+  "location": {
+   "lon": "49.997709929711334",
+   "lat": "26.648505839686422"
+  },
+  "attributes": [
+   {
+    "key": "noOfBedrooms",
+    "name": "Bedrooms",
+    "value": 2,
+    "image": "noofbedrooms.png",
+    "iconClass": "bedroom"
+   },
+   {
+    "key": "noOfBathrooms",
+    "name": "Bathrooms",
+    "value": 3,
+    "image": "noofbathrooms.png",
+    "iconClass": "bathroom"
+   },
+   {
+    "key": "carpetArea",
+    "name": "Land Area",
+    "value": "135",
+    "image": "carpetarea.png",
+    "unit": "SQM",
+    "iconClass": "plot-area"
+   }
+  ],
+  "iconBaseURL": "https://assets.wasalt.com",
+  "managedById": 55,
+  "propertyRegionId": 56,
+  "propertyInfo": {
+   "currencyType": "SAR",
+   "country": "Saudi Arabia",
+   "propertyMainType": "Residential",
+   "address": "Om Al Sahek, Qatif",
+   "breadCrumbs": [],
+   "city": "Qatif",
+   "propertySubType": "Apartment",
+   "furnishingType": null,
+   "facingType": null,
+   "description": "",
+   "title": "Apartment 135 SQM with 2 Bedrooms",
+   "unitType": "SQM",
+   "possessionType": "Not Ready",
+   "zone": "Om Al Sahek",
+   "propertyName": "Apartment for Sale",
+   "slug": "apartment-135-sqm-with-2-bedrooms-5743817",
+   "territory": null,
+   "tags": [
+    {
+     "name": "For Sale"
+    }
+   ],
+   "propertyFor": "sale",
+   "salePrice": null,
+   "expectedRent": null,
+   "conversionPrice": null,
+   "conversionUnit": "SAR",
+   "contactDetails": {
+    "DAAO_TEAM_WHATSAPP": "+966 53 388 5500",
+    "DAAO_TEAM_EMAIL": "admin@daralarkanonline.com",
+    "ADMIN_EMAIL": "admin@daralarkanonline.com",
+    "DAAO_TEAM_PHONE": "800 123 3227",
+    "FROM_EMAIL": "noreply@wasalt.com"
+   },
+   "projectId": null,
+   "countryId": 1,
+   "districId": 8037,
+   "districtId": 8037,
+   "district": "Om Al Sahek",
+   "cityId": 335,
+   "mainTypeId": 2,
+   "statusTypeId": 505,
+   "statusTypeSlug": "approved",
+   "propertySubTypeSlug": "apartment",
+   "alternateSlug": "شقة-135-متر-مربع-بغرفتين-5743817",
+   "averageSalePricePerSqm": null,
+   "rentFreq": "",
+   "propertyMainTypeSlug": "residential",
+   "regaGuaranteeDuration": "-",
+   "averageSalePriceLowerPercentage": null,
+   "rentPerSqFeet": null,
+   "rentCycle": null,
+   "otherCharges": null
+  },
+  "regaVerifiedInfo": [],
+  "priceValuation": null,
+  "barter": {
+   "isEnabled": false,
+   "sellerNote": null
+  },
+  "additionalAttributes": [
+   {
+    "key": "propertyMainType",
+    "label": "Property usage",
+    "value": "Residential"
+   },
+   {
+    "key": "electricityMeter",
+    "label": "Electricity",
+    "value": "No"
+   },
+   {
+    "key": "waterMeter",
+    "label": "Water",
+    "value": "No"
+   },
+   {
+    "key": "noOfFloors",
+    "label": "Total Floors",
+    "value": 4
+   },
+   {
+    "key": "floorNumber",
+    "label": "Property Floor",
+    "value": 2
+   },
+   {
+    "key": "borderEast",
+    "label": "Border from East",
+    "unit": "m"
+   },
+   {
+    "key": "borderWest",
+    "label": "Border from West",
+    "unit": "m"
+   },
+   {
+    "key": "borderNorth",
+    "label": "Border from North",
+    "unit": "m"
+   },
+   {
+    "key": "borderSouth",
+    "label": "Border from South",
+    "unit": "m"
+   },
+   {
+    "key": "lengthEast",
+    "label": "Length from East",
+    "unit": "m"
+   },
+   {
+    "key": "lengthWest",
+    "label": "Length from West",
+    "unit": "m"
+   },
+   {
+    "key": "lengthNorth",
+    "label": "Length from North",
+    "unit": "m"
+   },
+   {
+    "key": "lengthSouth",
+    "label": "Length from South",
+    "unit": "m"
+   },
+   {
+    "key": "regaGuaranteeDuration",
+    "label": "Guarantees and their Duration",
+    "value": "-",
+    "fullWidth": true
+   }
+  ],
+  "ageOfListing": "Listed 540 days ago",
+  "views": {
+   "count": 160,
+   "days": 7
+  }
+ },
+ "message": "Successful operation"
+}

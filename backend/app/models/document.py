@@ -1,0 +1,80 @@
+"""Source pages, retrievable passages, and crawl-run bookkeeping."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+
+from pydantic import BaseModel, Field
+
+from app.models.property import Source
+
+
+class ExtractionMethod(str, Enum):
+    HTTPX_BS4 = "httpx_bs4"
+    JSON_LD = "json_ld"
+    CRAWL4AI = "crawl4ai"
+
+
+class ExtractionStatus(str, Enum):
+    OK = "ok"
+    PARTIAL = "partial"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
+class Document(BaseModel):
+    """One fetched public page after cleaning."""
+
+    id: str
+    source: Source
+    canonical_url: str
+    title: str | None = None
+    cleaned_text: str
+    fetched_at: datetime
+    content_hash: str
+    extraction_method: ExtractionMethod
+    extraction_status: ExtractionStatus
+    language: str = "en"
+    http_status: int | None = None
+
+
+class Passage(BaseModel):
+    """A retrievable chunk of a document."""
+
+    id: str
+    document_id: str
+    property_id: str | None = None
+    source: Source
+    canonical_url: str
+    page_title: str | None = None
+    section_heading: str | None = None
+    text: str
+    collected_at: datetime
+    content_hash: str
+    language: str = "en"
+    embedding_model: str | None = None
+    # Set False when a newer version of the parent document supersedes this chunk.
+    active: bool = True
+
+
+class SkippedPage(BaseModel):
+    url: str
+    reason: str
+
+
+class FailedPage(BaseModel):
+    url: str
+    error: str
+
+
+class CrawlRun(BaseModel):
+    id: str
+    source: Source
+    started_at: datetime
+    finished_at: datetime | None = None
+    attempted_urls: list[str] = Field(default_factory=list)
+    succeeded: list[str] = Field(default_factory=list)
+    skipped: list[SkippedPage] = Field(default_factory=list)
+    failed: list[FailedPage] = Field(default_factory=list)
+    coverage_summary: dict = Field(default_factory=dict)

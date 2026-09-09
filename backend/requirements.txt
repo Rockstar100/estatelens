@@ -1,0 +1,24 @@
+# EstateLens web service runtime dependencies.
+# Pinned to compatible versions verified during implementation (Sept 2026).
+# A fully resolved lockfile is generated with `pip freeze` -> requirements.lock.
+
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# MongoDB: current supported PyMongo driver, using its native async client
+# (pymongo.AsyncMongoClient) so request handlers never block the event loop.
+pymongo==4.13.2
+
+httpx==0.28.1
+beautifulsoup4==4.12.3
+lxml==5.3.0
+
+typer==0.15.1
+tenacity==9.0.0
+orjson==3.10.13
+python-json-logger==3.2.1
+
+# Markdown / link hygiene on the server side.
+nh3==0.2.20
