@@ -223,5 +223,115 @@ def import_snapshot(path: Path = typer.Argument(..., help=".jsonl snapshot to lo
     _run(_go())
 
 
+@app.command("backfill-images")
+def backfill_images(
+    limit: int = typer.Option(80, help="max properties to update"),
+    only_missing: bool = typer.Option(True, help="skip records that already have image_url"),
+) -> None:
+    """Fetch listing/project photos for properties missing image_url and upsert."""
+
+    async def _go():
+        import httpx
+
+        from app.scrapers import wasalt as wasalt_adapter
+
+        db = db_client.get_db()
+        query: dict = {}
+        if only_missing:
+            query = {"$or": [{"image_url": None}, {"image_url": {"$exists": False}}, {"image_url": ""}]}
+        cursor = db.properties.find(query).limit(limit)
+        updated = 0
+        checked = 0
+        async with httpx.AsyncClient(follow_redirects=True, timeout=25.0) as client:
+            async for doc in cursor:
+                checked += 1
+                prop = doc_to_property(doc)
+                url = prop.source_url
+                if not url:
+                    continue
+                img = None
+                if prop.source == Source.WASALT:
+                    pid = prop.source_record_id or wasalt_adapter.property_id_from_url(url)
+                    if pid:
+                        try:
+                            data = await wasalt_adapter.fetch_api(client, str(pid))
+                        except Exception as exc:  # noqa: BLE001
+                            console.print(f"[yellow]api {prop.title[:40]}: {exc}")
+                            data = None
+                        if data:
+                            img = wasalt_adapter._image_from_api_payload(data)
+                    if not img:
+                        img = await wasalt_adapter.fetch_listing_image(client, url)
+                else:
+                    img = await wasalt_adapter.fetch_listing_image(client, url)
+                if not img:
+                    console.print(f"[dim]no image[/dim] {prop.title[:50]}")
+                    continue
+                prop.image_url = img
+                await repo.upsert_property(prop)
+                updated += 1
+                console.print(f"[green]ok[/green] {prop.title[:50]}")
+                await asyncio.sleep(0.25)
+        console.print(f"[bold]checked {checked}, updated {updated}")
+
+    _run(_go())
+
+
+@app.command()
+def embed(
+    rebuild: bool = typer.Option(False, help="re-embed every passage, not just missing/stale"),
+    batch: int = typer.Option(96, help="passages per embedding request"),
+) -> None:
+    """Build/refresh passage vectors for the semantic-retrieval layer and store
+    them on each passage in MongoDB (`embedding`, `embedding_model`,
+    `embedding_hash`). Uses GEMINI_API_KEY; no-op if it is unset."""
+
+    async def _go():
+        from app.services.embeddings import embed_texts, embedding_hash
+
+        s = get_settings()
+        if not s.gemini_api_key:
+            console.print("[red]GEMINI_API_KEY not set — nothing to do.")
+            raise typer.Exit(1)
+        db = db_client.get_db()
+        model, dims = s.embedding_model, s.embedding_dimensions
+
+        cursor = db.passages.find({"active": True}, {"_id": 1, "text": 1, "embedding_hash": 1})
+        todo: list[tuple[str, str]] = []
+        skipped = 0
+        async for p in cursor:
+            want = embedding_hash(p.get("text", ""), model, dims)
+            if not rebuild and p.get("embedding_hash") == want:
+                skipped += 1
+                continue
+            todo.append((p["_id"], p.get("text", "")))
+
+        console.print(f"[bold]{len(todo)} to embed[/], {skipped} already current  ({model}, {dims}d)")
+        done = 0
+        for i in range(0, len(todo), batch):
+            part = todo[i : i + batch]
+            vecs = await embed_texts([t for _, t in part], task_type="RETRIEVAL_DOCUMENT")
+            if not vecs:
+                console.print("[red]embedding request failed — stopping.")
+                break
+            for (pid, text), vec in zip(part, vecs):
+                await db.passages.update_one(
+                    {"_id": pid},
+                    {"$set": {
+                        "embedding": vec,
+                        "embedding_model": model,
+                        "embedding_hash": embedding_hash(text, model, dims),
+                    }},
+                )
+            done += len(part)
+            console.print(f"  embedded {done}/{len(todo)}")
+        indexed = await db.passages.count_documents(
+            {"embedding": {"$type": "array"}, "embedding_model": model}
+        )
+        console.print(f"[green]done[/] — {indexed} passages now carry a {model} vector")
+
+    _run(_go())
+
+
 if __name__ == "__main__":
     app()

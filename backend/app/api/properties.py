@@ -101,3 +101,80 @@ async def get_property(property_id: str) -> Property:
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
     return prop
+
+
+_ALLOWED_IMAGE_HOSTS = (
+    "imagedelivery.net",
+    "cdn.darglobal.co.uk",
+    "cdn.wasalt.sa",
+    "cdn.wasalt.com",
+    "assets.wasalt.com",
+)
+
+
+def _safe_image_url(url: str | None) -> str | None:
+    if not url or not isinstance(url, str):
+        return None
+    url = url.strip()
+    if not url.startswith(("http://", "https://")):
+        return None
+    if "undefined" in url or "/null/" in url:
+        return None
+    try:
+        from urllib.parse import urlparse
+
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:  # noqa: BLE001
+        return None
+    if not any(host == h or host.endswith("." + h) for h in _ALLOWED_IMAGE_HOSTS):
+        return None
+    return url
+
+
+@router.get("/{property_id}/image")
+async def property_image(property_id: str):
+    """Same-origin photo for cards. Looks up the live DB URL so chat history
+    from before image backfill still renders, and proxies bytes so CDN / referrer
+    quirks cannot blank the thumbnails."""
+    from fastapi.responses import Response
+    import httpx
+
+    if len(property_id) > 200:
+        raise HTTPException(status_code=422, detail="id too long")
+    prop = await repo.get_property(property_id)
+    if not prop:
+        raise HTTPException(status_code=404, detail="Property not found")
+    url = _safe_image_url(prop.image_url)
+    if not url:
+        raise HTTPException(status_code=404, detail="No image")
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+            upstream = await client.get(
+                url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                },
+            )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"image fetch failed: {exc}") from exc
+
+    if upstream.status_code != 200 or not upstream.content:
+        raise HTTPException(status_code=404, detail="image unavailable")
+
+    ctype = upstream.headers.get("content-type", "image/jpeg")
+    if not ctype.startswith("image/"):
+        raise HTTPException(status_code=404, detail="not an image")
+
+    return Response(
+        content=upstream.content,
+        media_type=ctype,
+        headers={
+            "Cache-Control": "public, max-age=86400",
+        },
+    )

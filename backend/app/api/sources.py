@@ -17,7 +17,7 @@ _SITE = {"darglobal": "darglobal.co.uk", "wasalt": "wasalt.sa"}
 
 # Recorded at implementation time — see docs/SUBMISSION.md. Kept here so the
 # Sources page always states exactly which model was tested and when.
-MODEL_TESTED_ON = "2026-09-09 (live generation call via OpenRouter)"
+MODEL_TESTED_ON = "2026-09-10 (OpenRouter / Groq / Gemini OpenAI-compatible stream)"
 
 
 @router.get("/sources", response_model=SourcesResponse)
@@ -53,14 +53,22 @@ async def sources() -> SourcesResponse:
         if not r["cities"]:
             gaps.append(f"{r['source']}: no city could be normalized for any record.")
 
+    fallback_bits = []
+    if settings.groq_api_key:
+        fallback_bits.append(f"groq/{settings.groq_model}")
+    if settings.gemini_api_key:
+        fallback_bits.append(f"gemini/{settings.gemini_model}")
+    if settings.openrouter_api_key:
+        fallback_bits.append(settings.openrouter_fallback_model)
+
     return SourcesResponse(
         sources=coverage,
         total_documents=counts["documents"],
         total_properties=counts["properties"],
         total_passages=counts["passages"],
         retrieval_method=RETRIEVAL_METHOD,
-        model=settings.openrouter_model,
-        fallback_model=settings.openrouter_fallback_model,
+        model=settings.active_llm_label,
+        fallback_model=", ".join(fallback_bits) or settings.openrouter_fallback_model,
         model_tested_on=MODEL_TESTED_ON,
         coverage_gaps=gaps,
         generated_at=datetime.now(timezone.utc),

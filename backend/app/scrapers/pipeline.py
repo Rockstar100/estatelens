@@ -136,6 +136,7 @@ async def run_crawl(
                         continue
                     try:
                         page_result = wasalt.build_from_api(url, data)
+                        await wasalt.attach_listing_image(client, page_result)
                     except Exception as exc:  # noqa: BLE001
                         run.failed.append(FailedPage(url=url, error=f"build: {exc}"[:300]))
                         continue

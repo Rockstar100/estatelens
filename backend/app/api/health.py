@@ -33,9 +33,14 @@ async def readiness(response: Response) -> ReadinessResponse:
 
     checks.append(
         ReadinessCheck(
-            name="openrouter_config",
-            ok=settings.openrouter_configured,
-            detail="OPENROUTER_API_KEY present" if settings.openrouter_configured else "missing key",
+            name="llm_config",
+            ok=settings.llm_configured,
+            detail=(
+                f"active={settings.active_llm_label}; "
+                f"groq={'yes' if settings.groq_api_key else 'no'}, "
+                f"gemini={'yes' if settings.gemini_api_key else 'no'}, "
+                f"openrouter={'yes' if settings.openrouter_api_key else 'no'}"
+            ),
         )
     )
 

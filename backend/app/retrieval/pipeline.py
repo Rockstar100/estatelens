@@ -5,9 +5,13 @@ Method (documented plainly for the Sources page):
      merge it with any explicit filters carried in the conversation context.
   2. Resolve ordinal references ("the first and third") against the ids last shown.
   3. Structured MongoDB query for matching property records (exact numeric rules).
-  4. MongoDB **text search** (keyword, not semantic) over passages for descriptive
-     questions and for passages tied to the selected/among-returned properties.
-  5. De-duplicate, cap at ``retrieval_passage_limit``, and number the evidence.
+  4. MongoDB **text search** (keyword) over passages for descriptive questions and
+     for passages tied to the selected/among-returned properties.
+  5. **Optional semantic layer** — when passage vectors are indexed (``embed``
+     CLI) and a query embedding is available, blend cosine similarity with the
+     keyword score and pull in strong semantic matches the keyword search missed.
+     Absent vectors / API → step 4 alone, unchanged.
+  6. De-duplicate, cap at ``retrieval_passage_limit``, and number the evidence.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from app.models.api import EvidenceItem
 from app.models.property import Property
 from app.retrieval.filters import PropertyFilter, build_mongo_filter
 from app.retrieval.nlu import extract_filter, merge_filters, resolve_ordinal_reference
+from app.retrieval.semantic import semantic_scores
 
 RETRIEVAL_METHOD = (
     "Structured MongoDB filtering over normalized property records plus MongoDB "
@@ -60,6 +65,46 @@ def _excerpt(text: str, limit: int = 320) -> str:
 async def _known_cities() -> list[str]:
     facets = await repo.property_facets()
     return [f["value"] for f in facets.get("cities", [])]
+
+
+async def _known_places() -> set[str]:
+    """Lower-cased city / district / country values that appear in the data."""
+    db = repo.get_db()
+    out: set[str] = set()
+    for field in ("city", "district", "country"):
+        for v in await db.properties.distinct(field):
+            if isinstance(v, str) and v.strip():
+                out.add(v.strip().lower())
+    return out
+
+
+# "... in Cairo", "near Tokyo", "properties at Marbella" — capture the place.
+_PLACE_IN_TEXT = re.compile(
+    r"\b(?:in|at|near|around|within|located in|based in)\s+"
+    r"([A-Z][A-Za-z]+(?:[ -][A-Z][A-Za-z]+){0,2})"
+)
+# Words that follow "in/at" but are not places.
+_NOT_A_PLACE = {
+    "the", "this", "that", "riyal", "saudi", "sar", "aed", "usd", "each",
+    "total", "cash", "stock", "general", "december", "january",
+}
+
+
+def _unknown_location(user_text: str, known: set[str]) -> str | None:
+    """Return a place named in the query that does not appear anywhere in the
+    collected data (so a location-scoped search should abstain, not fall back to
+    unrelated records). Returns None if any named place is known, or if no place
+    is named at all."""
+    candidates: list[str] = []
+    for m in _PLACE_IN_TEXT.finditer(user_text):
+        place = m.group(1).strip()
+        low = place.lower()
+        if low in _NOT_A_PLACE or low.split()[0] in _NOT_A_PLACE:
+            continue
+        if any(low == k or low in k or k in low for k in known):
+            return None  # a real place is named — let the search run
+        candidates.append(place)
+    return candidates[0] if candidates else None
 
 
 # Only these keys are honoured from a client-supplied context filter.
@@ -126,14 +171,30 @@ async def retrieve(
 
     # --- structured property query -------------------------------------
     # `source` alone is a weak signal (it does not mean the user wants a list of
-    # listings); a real structured query names a place, size, price or type.
+    # listings); a real structured query names a place, size, price or type,
+    # OR asks for a ranking ("cheapest", "sort by price").
     _weak = {"source", "text", "sort"}
     strong_structured = any(
         v not in (None, "", "relevance")
         for k, v in merged.model_dump().items()
         if k not in _weak
     )
-    has_structured = strong_structured or merged.source is not None
+    ranked = merged.sort != "relevance"
+    wants_listings = strong_structured or ranked
+
+    # A query scoped to a place we have nothing for ("apartments in Cairo") must
+    # abstain, not fall back to showing unrelated records from other cities.
+    bad_place = None
+    if not (merged.city or merged.district or merged.country):
+        bad_place = _unknown_location(user_text, await _known_places())
+    if bad_place:
+        wants_listings = False
+        result.filter_notes = [f"no collected records in {bad_place}"]
+        result.applied_filters = {}
+        result.properties = []
+        result.evidence = []
+        return result
+
     mongo_filter, sort_spec, notes = build_mongo_filter(merged)
     result.filter_notes = notes
 
@@ -141,25 +202,41 @@ async def retrieve(
     if selected_ids:
         properties = await repo.get_properties(selected_ids)
 
-    # A question that names a project/listing should always pull that record so
-    # its structured facts (price, handover, area…) reach the model.
+    # Name matching is for "Trump Tower Jeddah"-style questions. Always try it —
+    # even alongside structured filters — so a named project is not dropped when
+    # the user also says "for sale" / "bedrooms" / etc. Prefer named hits first.
     named = await repo.find_properties_by_title(user_text, limit=3)
     named_ids = {p.id for p in named}
     for p in named:
         if p.id not in {x.id for x in properties}:
             properties.append(p)
 
-    if strong_structured or selected_ids or (merged.text and not selected_ids):
+    ranked_hits: list[Property] = []
+    if wants_listings or selected_ids or merged.text:
         page_items, _total = await repo.query_properties(
             mongo_filter, page=1, page_size=12, sort=sort_spec
         )
+        ranked_hits = page_items
         for p in page_items:
             if p.id not in {x.id for x in properties}:
                 properties.append(p)
 
-    # Surface cards only when the user narrowed things down or the set is small
-    # enough to be useful — not a full dump for a "what does X say" question.
-    if selected_ids or named_ids or strong_structured or 0 < len(properties) <= 6:
+    # Named matches first so the model sees the asked-about record before a
+    # broad filter dump (unless a ranked query needs price/area order).
+    if named and not ranked:
+        named_first = [p for p in named]
+        rest = [p for p in properties if p.id not in named_ids]
+        properties = named_first + rest
+
+    # For a ranked query ("cheapest …") the ordering carries the answer — put the
+    # ranked results first so the model reads them in order, and always keep the
+    # true #1 even if a title match jumped the queue.
+    if ranked and ranked_hits:
+        top = ranked_hits[0]
+        rest = [p for p in properties if p.id != top.id]
+        properties = [top] + rest
+
+    if selected_ids or named_ids or wants_listings or 0 < len(properties) <= 6:
         result.properties = properties[:6]
     else:
         result.properties = []
@@ -169,17 +246,52 @@ async def retrieve(
     sources = [merged.source.value] if merged.source else None
     scored = await repo.search_passages(search_terms, limit=limit * 3, sources=sources)
 
-    # Passages tied to the specific properties the user selected or that a *strong*
-    # structured query surfaced take priority — but a bare "what does X say"
-    # question keeps the free-text ranking.
+    # Passages tied to the specific properties the user selected, a *strong*
+    # structured query surfaced, or a *ranked* query put on top take priority —
+    # a bare "what does X say" question keeps the free-text ranking.
     prop_ids = [p.id for p in result.properties]
-    if prop_ids and (selected_ids or strong_structured):
+    if prop_ids and (selected_ids or strong_structured or ranked):
         tied = await repo.search_passages(
             search_terms or "amenities location price",
             limit=limit,
             property_ids=prop_ids,
         )
+        # For a ranked query, order the tied passages to match the card order.
+        if ranked:
+            rank = {pid: i for i, pid in enumerate(prop_ids)}
+            tied.sort(key=lambda s: rank.get(s[0].property_id, 999))
         scored = tied + [s for s in scored if s[0].id not in {t[0].id for t in tied}]
+
+    # --- semantic re-rank + recall (optional hybrid layer) -------------
+    # Blend cosine similarity from passage embeddings with the lexical score, and
+    # pull in strong semantic matches the keyword search missed. Skipped for a
+    # ranked query (there the card order carries the answer) and when no vectors
+    # are indexed / the query can't be embedded.
+    if not ranked:
+        allowed_pids = {p.id for p in result.properties} or None
+        sem = await semantic_scores(
+            search_terms, allowed_property_ids=allowed_pids, top_k=limit * 3
+        )
+        if sem:
+            lex = {p.id: sc for p, sc in scored}
+            lex_max = max(lex.values(), default=0.0) or 1.0
+            missing = [pid for pid in sem if pid not in lex]
+            if missing:
+                extra = await repo.get_passages_by_ids(missing)
+                if sources:
+                    extra = [
+                        p for p in extra
+                        if getattr(p.source, "value", p.source) in sources
+                    ]
+                scored = scored + [(p, 0.0) for p in extra]
+            w = settings.embedding_weight
+
+            def _blend(item: tuple) -> float:
+                p, sc = item
+                lex_n = (sc / lex_max) if lex_max else 0.0
+                return w * sem.get(p.id, 0.0) + (1.0 - w) * lex_n
+
+            scored = sorted(scored, key=_blend, reverse=True)
 
     if not scored and not result.properties:
         # last resort: give the model *something* real to describe coverage from

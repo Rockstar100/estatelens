@@ -1,27 +1,27 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   EstateLens design tokens — a calm, premium property-research workspace.
+   EstateLens design tokens — calm property-research workspace.
    --------------------------------------------------------------------------- */
 @theme {
-  --color-bg: #f7f7f4;
+  --color-bg: #f3f4f0;
   --color-surface: #ffffff;
-  --color-surface-muted: #f1f1ec;
-  --color-ink: #17211d;
-  --color-ink-soft: #68736c;
-  --color-accent: #245b45;
-  --color-accent-hover: #1c4a38;
+  --color-surface-muted: #eef0ea;
+  --color-ink: #15201b;
+  --color-ink-soft: #5f6b64;
+  --color-accent: #1f5a42;
+  --color-accent-hover: #174833;
   --color-warm: #b79a66;
-  --color-line: #e3e7e1;
+  --color-line: #dde2db;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
 
   --radius-card: 14px;
   --radius-control: 10px;
 
-  --shadow-soft: 0 1px 2px rgba(23, 33, 29, 0.04), 0 4px 16px rgba(23, 33, 29, 0.05);
-  --shadow-pop: 0 8px 30px rgba(23, 33, 29, 0.12);
+  --shadow-soft: 0 1px 2px rgba(21, 32, 27, 0.04), 0 6px 20px rgba(21, 32, 27, 0.06);
+  --shadow-pop: 0 10px 32px rgba(21, 32, 27, 0.14);
 }
 
 @layer base {
@@ -33,7 +33,10 @@
   }
   body {
     margin: 0;
-    background: var(--color-bg);
+    background:
+      radial-gradient(1200px 500px at 10% -10%, rgba(31, 90, 66, 0.07), transparent 55%),
+      radial-gradient(900px 420px at 100% 0%, rgba(183, 154, 102, 0.08), transparent 50%),
+      var(--color-bg);
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: 15px;
@@ -42,8 +45,8 @@
   }
   h1, h2, h3, h4 {
     line-height: 1.25;
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-weight: 650;
+    letter-spacing: -0.02em;
   }
   :focus-visible {
     outline: 2px solid var(--color-accent);
@@ -98,15 +101,30 @@
 }
 
 .markdown > * + * {
-  margin-top: 0.7rem;
+  margin-top: 0.65rem;
+}
+.markdown p {
+  margin: 0;
 }
 .markdown ul {
   list-style: disc;
-  padding-left: 1.25rem;
+  padding-left: 1.2rem;
+  margin: 0.4rem 0 0;
 }
 .markdown ol {
   list-style: decimal;
-  padding-left: 1.25rem;
+  padding-left: 1.2rem;
+  margin: 0.4rem 0 0;
+}
+.markdown li + li {
+  margin-top: 0.35rem;
+}
+.markdown li::marker {
+  color: var(--color-accent);
+}
+.markdown strong {
+  font-weight: 650;
+  color: var(--color-ink);
 }
 .markdown a {
   color: var(--color-accent);
@@ -118,4 +136,39 @@
   padding: 0.1rem 0.3rem;
   border-radius: 6px;
   font-size: 0.9em;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-weight: 650;
+  color: var(--color-ink);
+  line-height: 1.3;
+  margin: 0.9rem 0 0;
+}
+.markdown h1 { font-size: 1.15em; }
+.markdown h2 { font-size: 1.08em; }
+.markdown h3,
+.markdown h4 { font-size: 1em; }
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+  margin: 0.5rem 0 0;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--color-line);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown th {
+  background: var(--color-surface-muted);
+  font-weight: 600;
+}
+.markdown blockquote {
+  border-left: 3px solid var(--color-line);
+  padding-left: 0.75rem;
+  color: var(--color-ink-soft);
 }

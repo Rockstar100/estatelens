@@ -109,11 +109,6 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </ul>
         )}
       </div>
-
-      <p className="px-1 text-[11px] leading-relaxed text-[var(--color-ink-soft)]">
-        Independent demo. Data collected from public DarGlobal &amp; Wasalt pages; not affiliated
-        with either.
-      </p>
     </div>
   );
 }

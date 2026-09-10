@@ -37,7 +37,7 @@ def test_readiness_reports_checks(client):
     r = client.get("/api/readiness")
     assert r.status_code in (200, 503)
     names = {c["name"] for c in r.json()["checks"]}
-    assert {"mongodb", "openrouter_config", "indexed_data"} <= names
+    assert {"mongodb", "llm_config", "indexed_data"} <= names
 
 
 def test_properties_rejects_bad_pagination(client):

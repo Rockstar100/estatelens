@@ -11,6 +11,8 @@ venv/
 # Node
 node_modules/
 frontend/dist/
+frontend/.pytest_cache/
+frontend/pytest-cache-*/
 *.local
 
 # Build artifact: the SPA is compiled into the image by the Dockerfile
@@ -27,13 +29,19 @@ backend/static/
 .DS_Store
 Thumbs.db
 
-# AI agent tooling
+# AI agent tooling / local planning (never commit)
 .agents/
 .claude/
+.cursor/
 skills-lock.json
+task_plan.md
+progress.md
+findings.md
+.planning/
 
-# Runtime
+# Runtime / eval artifacts
 *.log
+data/eval_*
 data/snapshots/*.jsonl
 !data/snapshots/.gitkeep
 !data/snapshots/sample-*.jsonl

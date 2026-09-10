@@ -49,9 +49,34 @@ def test_nlu_extracts_structured_intent():
 def test_nlu_source_detection():
     assert extract_filter("what does wasalt say about auctions").source == Source.WASALT
     assert extract_filter("darglobal waterfront projects").source == Source.DARGLOBAL
+    # tolerant of common misspellings
+    assert extract_filter("and what is waslt").source == Source.WASALT
+    assert extract_filter("show me darglob projects").source == Source.DARGLOBAL
 
 
-def test_merge_filters_refines_not_replaces():
+def test_nlu_hyphenated_and_plus_bedrooms():
+    assert extract_filter("any 3-bedroom apartments?").bedrooms == 3
+    assert extract_filter("4+ bedrooms").bedrooms_min == 4
+    assert extract_filter("2br flat").bedrooms == 2
+
+
+def test_nlu_area_superlatives():
+    assert extract_filter("show me the largest property by area").sort == "area_desc"
+    assert extract_filter("biggest villa").sort == "area_desc"
+    assert extract_filter("smallest apartment").sort == "area_asc"
+    _q, sort_spec, notes = build_mongo_filter(extract_filter("biggest villa"))
+    assert sort_spec == [("area_value", -1)]
+    assert any("largest first" in n for n in notes)
+
+
+def test_nlu_sale_or_rent_question_does_not_lock_transaction():
+    f = extract_filter("Is Trump Tower Jeddah listed for sale or for rent?")
+    assert f.transaction_type is None
+    f2 = extract_filter("sale or rent for this apartment?")
+    assert f2.transaction_type is None
+    # Still detects a one-sided filter
+    assert extract_filter("3 bedroom villa for rent in Dubai").transaction_type == TransactionType.RENT
+    assert extract_filter("apartments for sale in Riyadh").transaction_type == TransactionType.SALE
     base = PropertyFilter(city="Riyadh", transaction_type=TransactionType.SALE)
     update = PropertyFilter(bedrooms=3)
     merged = merge_filters(base, update)

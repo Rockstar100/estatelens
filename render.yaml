@@ -27,3 +27,13 @@ services:
         sync: false
       - key: OPENROUTER_FALLBACK_MODEL
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
+      - key: LLM_PROVIDER
+        value: auto

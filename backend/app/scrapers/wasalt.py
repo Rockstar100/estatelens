@@ -144,6 +144,113 @@ async def fetch_api(client: httpx.AsyncClient, property_id: str) -> dict | None:
     return data
 
 
+# Cloudflare Images account used by Wasalt's public PDP og:image URLs.
+_WASALT_IMAGE_HOST = "https://imagedelivery.net/1DNKFJPRaeUdy_j8F7HT3w"
+
+
+def _image_from_api_payload(data: dict) -> str | None:
+    """Build a card image URL from the DETAIL_PAGE_MOBILE payload.
+
+    Gallery binary URLs are omitted from the JSON, but ``classificationData``
+    lists each photo's Cloudflare Images object name — the same ids the HTML
+    ``og:image`` tag uses.
+    """
+    for img_key in ("coverImage", "image", "thumbnail", "mainImage", "defaultImage"):
+        v = data.get(img_key)
+        if isinstance(v, str) and v.startswith("http"):
+            return v
+        if isinstance(v, dict):
+            for nested in ("url", "src", "path", "imageUrl"):
+                nv = v.get(nested)
+                if isinstance(nv, str) and nv.startswith("http"):
+                    return nv
+    for key in ("media", "images", "propertyImages", "photos", "gallery"):
+        media = data.get(key)
+        if not isinstance(media, list) or not media:
+            continue
+        first = media[0]
+        if isinstance(first, str) and first.startswith("http"):
+            return first
+        if isinstance(first, dict):
+            for nested in ("url", "src", "path", "imageUrl", "original", "large"):
+                nv = first.get(nested)
+                if isinstance(nv, str) and nv.startswith("http"):
+                    return nv
+
+    pid = str(data.get("id") or "").strip()
+    classified = data.get("classificationData") or []
+    if pid and isinstance(classified, list) and classified:
+        preferred = None
+        fallback = None
+        for row in classified:
+            if not isinstance(row, dict):
+                continue
+            name = row.get("name")
+            if not isinstance(name, str):
+                continue
+            name = name.strip()
+            if name.lower() in {"undefined", "null", "none", ""}:
+                continue
+            if not name.endswith((".webp", ".jpg", ".jpeg", ".png")):
+                continue
+            # Skip QR / advert assets Wasalt sometimes classifies as photos.
+            low_name = name.lower()
+            if any(bad in low_name for bad in ("ad_qr", "qr-code", "qr_code", "watermark", "logo")):
+                continue
+            label = str(row.get("classificationName") or "").lower()
+            if preferred is None and label in {"facade", "exterior", "front", "building"}:
+                preferred = name
+            if fallback is None and label not in {"empty_room", "plan", "floor_plan", "map"}:
+                fallback = name
+            if preferred is None and fallback is None:
+                fallback = name
+        chosen = preferred or fallback
+        if chosen:
+            return (
+                f"{_WASALT_IMAGE_HOST}/production/properties/{pid}/images/"
+                f"{chosen}/quality=60,format=auto,width=800"
+            )
+    return None
+
+
+async def fetch_listing_image(client: httpx.AsyncClient, url: str) -> str | None:
+    """PDP HTML carries og:image (Cloudflare imagedelivery) even when the JSON API does not.
+
+    Wasalt's HTML edge often 403s httpx but accepts stdlib urllib with the same
+    browser UA, so we fetch via a thread rather than the shared httpx client.
+    Prefer this over classificationData when available — og:image is the real cover.
+    """
+    import asyncio
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    def _fetch() -> str | None:
+        req = Request(url, headers=API_HEADERS)
+        try:
+            with urlopen(req, timeout=25) as resp:
+                html = resp.read().decode("utf-8", "replace")
+        except (HTTPError, URLError, TimeoutError, OSError):
+            return None
+        img = H.og_image_from_html(html)
+        if img and "undefined" not in img and "ad_qr" not in img.lower():
+            return img
+        return None
+
+    return await asyncio.to_thread(_fetch)
+
+
+async def attach_listing_image(client: httpx.AsyncClient, page: ExtractedPage) -> None:
+    for prop in page.properties:
+        # Prefer the HTML cover photo; fall back to whatever the JSON builder set.
+        html_img = await fetch_listing_image(client, prop.source_url)
+        if html_img:
+            prop.image_url = html_img
+        elif prop.image_url and (
+            "undefined" in prop.image_url or "ad_qr" in prop.image_url.lower()
+        ):
+            prop.image_url = None
+
+
 def _num(value) -> Decimal | None:
     if value in (None, "", "null"):
         return None
@@ -228,17 +335,7 @@ def build_from_api(url: str, data: dict) -> ExtractedPage:
         ):
             amenities.append(name.strip())
 
-    image_url = None
-    for img_key in ("coverImage", "image"):
-        v = data.get(img_key)
-        if isinstance(v, str) and v.startswith("http"):
-            image_url = v
-            break
-    if image_url is None:
-        media = data.get("media") or data.get("images") or []
-        if isinstance(media, list) and media:
-            first = media[0]
-            image_url = first.get("url") if isinstance(first, dict) else (first if isinstance(first, str) else None)
+    image_url = _image_from_api_payload(data)
 
     doc_id = f"wasalt:doc:{slugify(url[len(BASE):].strip('/') or pid, 100)}"
     facts = [

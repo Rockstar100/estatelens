@@ -61,7 +61,12 @@ class Passage(BaseModel):
     collected_at: datetime
     content_hash: str
     language: str = "en"
+    # Semantic index (optional). ``embedding`` is a unit-normalised float vector;
+    # ``embedding_hash`` ties it to the exact text it was built from so a content
+    # change invalidates it.
     embedding_model: str | None = None
+    embedding: list[float] | None = None
+    embedding_hash: str | None = None
     # Set False when a newer version of the parent document supersedes this chunk.
     active: bool = True
 

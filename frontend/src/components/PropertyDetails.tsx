@@ -66,13 +66,20 @@ export function PropertyDetails({ propertyId, seed, onClose, onAsk }: Props) {
         {prop && (
           <>
             <div className="overflow-hidden rounded-[12px] border border-[var(--color-line)] bg-[var(--color-surface-muted)]">
-              {prop.image_url ? (
-                <img src={prop.image_url} alt="" className="aspect-[16/10] w-full object-cover" onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
-              ) : (
-                <div className="flex aspect-[16/10] items-center justify-center">
-                  <Building2 className="size-10 text-[var(--color-line)]" />
-                </div>
-              )}
+              <img
+                src={`/api/properties/${encodeURIComponent(prop.id)}/image`}
+                alt=""
+                className="aspect-[16/10] w-full object-cover"
+                onError={(e) => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  el.style.display = "none";
+                  const fallback = el.nextElementSibling as HTMLElement | null;
+                  if (fallback) fallback.style.display = "flex";
+                }}
+              />
+              <div className="flex aspect-[16/10] items-center justify-center" style={{ display: "none" }}>
+                <Building2 className="size-10 text-[var(--color-line)]" />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -125,8 +132,7 @@ export function PropertyDetails({ propertyId, seed, onClose, onAsk }: Props) {
             </div>
 
             <div className="rounded-[10px] border border-[var(--color-line)] px-3 py-2 text-xs text-[var(--color-ink-soft)]">
-              Collected from <span className="font-medium capitalize">{prop.source}</span> on {relativeDate(prop.scraped_at)}.
-              This is a point-in-time snapshot, not live inventory.
+              From <span className="font-medium capitalize">{prop.source}</span>, {relativeDate(prop.scraped_at)} · not live inventory
             </div>
 
             <div className="flex flex-wrap gap-2">

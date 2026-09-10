@@ -76,21 +76,35 @@ _NON_PROJECT_SLUGS = {
 
 _INFO_SLUGS = ["about", "faq", "why-invest", "development-management", "hospitality"]
 
+# Ordered most-specific first: a city keyword names a place unambiguously; a
+# bare country keyword is the fallback. "london"/"uk" sit last on purpose — the
+# DarGlobal HQ address makes "London" appear in every page's boilerplate, so it
+# must never outrank a real location keyword found earlier in the text.
 _COUNTRY_BY_KEYWORD = {
-    "uae": ("United Arab Emirates", None),
     "dubai": ("United Arab Emirates", "Dubai"),
     "abu-dhabi": ("United Arab Emirates", "Abu Dhabi"),
-    "saudi-arabia": ("Saudi Arabia", None),
+    "abu dhabi": ("United Arab Emirates", "Abu Dhabi"),
+    "ras al khaimah": ("United Arab Emirates", "Ras Al Khaimah"),
+    "al marjan": ("United Arab Emirates", "Ras Al Khaimah"),
     "jeddah": ("Saudi Arabia", "Jeddah"),
     "riyadh": ("Saudi Arabia", "Riyadh"),
-    "oman": ("Oman", None),
     "muscat": ("Oman", "Muscat"),
-    "qatar": ("Qatar", "Doha"),
-    "spain": ("Spain", None),
+    "aida": ("Oman", "Muscat"),
+    "doha": ("Qatar", "Doha"),
     "marbella": ("Spain", "Marbella"),
-    "uk": ("United Kingdom", "London"),
-    "london": ("United Kingdom", "London"),
+    "benahavis": ("Spain", "Benahavís"),
+    "benahavís": ("Spain", "Benahavís"),
+    "costa del sol": ("Spain", None),
+    "estepona": ("Spain", "Estepona"),
     "maldives": ("Maldives", None),
+    "uae": ("United Arab Emirates", None),
+    "saudi-arabia": ("Saudi Arabia", None),
+    "saudi arabia": ("Saudi Arabia", None),
+    "qatar": ("Qatar", "Doha"),
+    "oman": ("Oman", None),
+    "spain": ("Spain", None),
+    "london": ("United Kingdom", "London"),
+    "united kingdom": ("United Kingdom", "London"),
 }
 
 _PROPERTY_TYPE_KEYWORDS = ("villa", "apartment", "penthouse", "townhouse", "mansion", "hotel room")
@@ -179,11 +193,29 @@ async def discover(client: httpx.AsyncClient, limit: int = 80) -> list[str]:
     return deduped[:limit]
 
 
-def _country_city_from_text(text: str, url: str) -> tuple[str | None, str | None]:
-    hay = f"{url} {text[:2000]}".lower()
+def _match_location(hay: str) -> tuple[str | None, str | None]:
+    """First keyword hit within ``hay`` in most-specific-first priority order."""
     for kw, (country, city) in _COUNTRY_BY_KEYWORD.items():
         if re.search(rf"\b{re.escape(kw)}\b", hay):
             return country, city
+    return None, None
+
+
+def _country_city_from_text(
+    text: str, url: str, *, primary: str = "", title: str = ""
+) -> tuple[str | None, str | None]:
+    """Resolve country/city, trusting the authoritative signals first.
+
+    ``primary`` is the DarGlobal "Location" key-fact and ``title`` the page
+    title — either names the real location. The page body is only consulted for
+    its lead paragraph (before the repeated footer/HQ boilerplate that would
+    otherwise pull every record to London).
+    """
+    for strong in (primary, title, url, text[:700]):
+        if strong:
+            hit = _match_location(strong.lower())
+            if hit[0]:
+                return hit
     return None, None
 
 
@@ -247,7 +279,7 @@ def extract(
 
     properties: list[Property] = []
     if _is_development_page(url) and cleaned:
-        prop = _build_development(url, final_url, title, cleaned, soup, passages, now)
+        prop = _build_development(url, final_url, title, cleaned, soup, passages, now, html)
         if prop:
             properties.append(prop)
             for p in passages:
@@ -269,6 +301,7 @@ def _build_development(
     soup,
     passages: list[Passage],
     now: datetime,
+    html: str = "",
 ) -> Property | None:
     facts = _parse_dg_facts(cleaned)
 
@@ -278,7 +311,7 @@ def _build_development(
         basis = PriceBasis.STARTING  # DarGlobal quotes "starting from" prices
 
     loc_text = facts.get("location", "")
-    country, city = _country_city_from_text(f"{loc_text} {cleaned}", url)
+    country, city = _country_city_from_text(cleaned, url, primary=loc_text, title=title)
 
     area_text = facts.get("area (sqm)") or facts.get("area (sqm)".lower())
     if area_text:
@@ -339,7 +372,7 @@ def _build_development(
         description=description,
         developer="DarGlobal",
         completion_or_handover_text=handover,
-        image_url=H.og_image(soup),
+        image_url=H.og_image(soup, html),
         source_url=final_url or url,
         scraped_at=now,
         content_hash=content_hash(cleaned),

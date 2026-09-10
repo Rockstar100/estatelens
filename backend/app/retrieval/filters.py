@@ -25,6 +25,8 @@ _ALLOWED_SORTS = {
     "price_asc": [("price_amount", 1)],
     "price_desc": [("price_amount", -1)],
     "newest": [("scraped_at", -1)],
+    "area_desc": [("area_value", -1)],
+    "area_asc": [("area_value", 1)],
 }
 
 
@@ -124,5 +126,16 @@ def build_mongo_filter(f: PropertyFilter) -> tuple[dict[str, Any], list[tuple[st
 
     if f.text:
         query["$text"] = {"$search": f.text}
+
+    if f.sort == "price_asc":
+        notes.append("ordered by price, lowest first")
+    elif f.sort == "price_desc":
+        notes.append("ordered by price, highest first")
+    elif f.sort == "newest":
+        notes.append("ordered by most recently collected")
+    elif f.sort == "area_desc":
+        notes.append("ordered by area, largest first")
+    elif f.sort == "area_asc":
+        notes.append("ordered by area, smallest first")
 
     return query, _ALLOWED_SORTS.get(f.sort), notes

@@ -41,7 +41,7 @@ export function Composer({
               if (!streaming) onSend();
             }
           }}
-          placeholder="Ask about properties, projects, prices, or what a source says…"
+          placeholder="Ask about a property, project, or price…"
           className="max-h-[180px] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-[var(--color-ink-soft)]"
           aria-label="Message"
         />
@@ -61,8 +61,7 @@ export function Composer({
         )}
       </div>
       <p className="px-2 pt-1 text-[11px] text-[var(--color-ink-soft)]">
-        Enter to send · Shift+Enter for a new line. Answers are grounded in collected DarGlobal &
-        Wasalt pages.
+        Enter to send · Shift+Enter for a new line
       </p>
     </div>
   );

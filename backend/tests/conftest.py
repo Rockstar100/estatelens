@@ -16,7 +16,11 @@ import pytest
 os.environ.setdefault("MONGODB_URI", "mongodb://localhost:27017")
 # FORCE (not setdefault): a leaked MONGODB_DATABASE=estatelens must not win.
 os.environ["MONGODB_DATABASE"] = "estatelens_pytest"
-os.environ.setdefault("OPENROUTER_API_KEY", "")
+# FORCE every LLM provider key empty: the suite mocks inference, and a real key
+# in .env must not make tests hit a live provider (env vars beat the .env file).
+for _k in ("OPENROUTER_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY"):
+    os.environ[_k] = ""
+os.environ.setdefault("LLM_PROVIDER", "auto")
 
 _ALLOWED_TEST_DBS = {"estatelens_pytest"}
 

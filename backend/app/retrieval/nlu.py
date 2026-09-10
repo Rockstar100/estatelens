@@ -63,20 +63,33 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
     lowered = f" {text.lower()} "
     data: dict = {}
 
-    # --- source -------------------------------------------------------
-    if "darglobal" in lowered or "dar global" in lowered:
+    # --- source (tolerant of common misspellings) --------------------
+    if re.search(r"\bdar\s?global\b|\bdarglob\w*\b|\bdar\s?glob\w*\b", lowered):
         data["source"] = Source.DARGLOBAL
-    elif "wasalt" in lowered:
+    elif re.search(r"\bwas+a?l+a?t\b|\bwasl?at\b|\bwaslt\b|\bwasal\b", lowered):
         data["source"] = Source.WASALT
 
     # --- transaction type ------------------------------------------
-    if re.search(
+    # "for sale or for rent" / "sale or rent" asks which applies — do not
+    # lock the filter to one side (that drops the named property entirely).
+    asking_tx = re.search(
+        r"\b(?:for\s+)?sale\s+or\s+(?:for\s+)?rent\b"
+        r"|\b(?:for\s+)?rent\s+or\s+(?:for\s+)?sale\b"
+        r"|\bsale\s*/\s*rent\b"
+        r"|\brent\s*/\s*sale\b",
+        lowered,
+    )
+    if asking_tx:
+        pass
+    elif re.search(
         r"\b(for rent|to rent|rent(?:al|als|ed|ing)?|leas(?:e|ing)|to let|for hire)\b",
         lowered,
     ):
         data["transaction_type"] = TransactionType.RENT
     elif re.search(
-        r"\b(for sale|to buy|buy(?:ing)?|purchas(?:e|ing)|on sale|to own)\b", lowered
+        r"\b(for[- ]sale|to buy|buy(?:ing)?|purchas(?:e|ing)|on sale|to own|"
+        r"sale listing|sales? listings?|resale|sale)\b",
+        lowered,
     ):
         data["transaction_type"] = TransactionType.SALE
 
@@ -87,7 +100,8 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
         data["record_type"] = RecordType.LISTING
 
     # --- bedrooms ---------------------------------------------
-    bed = re.search(r"\b(\d{1,2})\s*(?:\+)?\s*(?:bed|bedroom|bedrooms|br|bhk)\b", lowered)
+    # Accepts "3 bed", "3-bedroom", "3br", "3 bhk", "3+ bedrooms".
+    bed = re.search(r"\b(\d{1,2})\s*(?:\+)?[\s-]*(?:bed(?:room)?s?|br|bhk)\b", lowered)
     if bed:
         n = int(bed.group(1))
         if re.search(rf"{bed.group(1)}\s*\+", lowered) or "at least" in lowered or "or more" in lowered:
@@ -137,6 +151,20 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
             data["city"] = city
             break
 
+    # --- superlatives -> sort ------------------------------
+    if re.search(r"\b(cheapest|lowest[- ]?priced?|least expensive|most affordable|budget)\b", lowered):
+        data["sort"] = "price_asc"
+    elif re.search(r"\b(most expensive|priciest|highest[- ]?priced?|dearest|top[- ]?priced?)\b", lowered):
+        data["sort"] = "price_desc"
+    elif re.search(r"\b(newest|latest|most recent|recently (?:added|collected))\b", lowered):
+        data["sort"] = "newest"
+    elif re.search(r"\b(sort|order)(ed)? by (lowest |ascending )?price\b", lowered):
+        data["sort"] = "price_asc"
+    elif re.search(r"\b(largest|biggest|most spacious|widest|greatest area|by (?:size|area))\b", lowered):
+        data["sort"] = "area_desc"
+    elif re.search(r"\b(smallest|most compact|tiniest|least (?:area|space))\b", lowered):
+        data["sort"] = "area_asc"
+
     return PropertyFilter.model_validate(data)
 
 
@@ -163,4 +191,9 @@ def merge_filters(base: PropertyFilter, update: PropertyFilter) -> PropertyFilte
     for key, value in update.model_dump().items():
         if value not in (None, "", "relevance"):
             merged[key] = value
+    # Exact bedroom count and a minimum are mutually exclusive — keep the latest.
+    if update.bedrooms is not None:
+        merged["bedrooms_min"] = None
+    if update.bedrooms_min is not None and update.bedrooms is None:
+        merged["bedrooms"] = None
     return PropertyFilter.model_validate(merged)

@@ -19,5 +19,8 @@ tests
 .crawl4ai
 .agents
 .claude
+.cursor
 skills-lock.json
+task_plan.md
+data/eval_*
 README.md

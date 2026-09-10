@@ -36,7 +36,12 @@ from app.services.logging import get_logger
 import re
 
 from app.services.openrouter import OpenRouterClient, OpenRouterError
-from app.services.prompt import build_messages, extract_cited_evidence_ids, normalize_citations
+from app.services.prompt import (
+    build_messages,
+    extract_cited_evidence_ids,
+    normalize_citations,
+    strip_reasoning_preamble,
+)
 
 router = APIRouter(tags=["chat"])
 log = get_logger("estatelens.chat")
@@ -102,11 +107,30 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
         used_model = None
         usage = None
         pending = ""  # holds a partial citation token straddling two deltas
+        # Prelude gate: hold the opening back until we can tell whether a
+        # "reasoning" model has leaked an untagged planning monologue. Once the
+        # first real content is identified we stop gating and stream normally.
+        gate_open = False
+        gate_buf = ""
+        default_model = or_client.primary_model_label
+
+        def _flush_gate(text: str) -> str:
+            cleaned = strip_reasoning_preamble(text)
+            return cleaned
+
         try:
             async for chunk in or_client.stream_chat(messages):
                 if chunk.text:
                     answer_parts.append(chunk.text)
-                    buf = pending + chunk.text
+                    if not gate_open:
+                        gate_buf += chunk.text
+                        if len(gate_buf) < 220 and "\n\n" not in gate_buf:
+                            continue
+                        gate_open = True
+                        opening = _flush_gate(gate_buf)
+                        buf = pending + opening
+                    else:
+                        buf = pending + chunk.text
                     # keep a short tail back if it might be an unfinished [E.. / 【E..
                     m = _TRAILING_CITE.search(buf)
                     if m:
@@ -119,6 +143,12 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
                     finish_reason = chunk.finish_reason
                     used_model = chunk.model
                     usage = chunk.usage
+            if not gate_open and gate_buf:
+                # stream ended inside the gate window
+                emit = pending + _flush_gate(gate_buf)
+                pending = ""
+                if emit:
+                    yield _sse(StreamDelta(text=normalize_citations(emit)))
         except OpenRouterError as exc:
             log.warning(
                 "inference failed",
@@ -136,7 +166,22 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
         if pending:
             yield _sse(StreamDelta(text=normalize_citations(pending)))
 
-        answer = normalize_citations("".join(answer_parts))
+        answer = normalize_citations(strip_reasoning_preamble("".join(answer_parts)))
+
+        # Every provider streamed but nothing usable came back (e.g. a reasoning
+        # model that spent its budget thinking). Report it, don't leave a blank
+        # bubble.
+        if not answer.strip():
+            log.warning("empty answer from model", extra={"request_id": rid, "finish_reason": finish_reason})
+            yield _sse(
+                StreamError(
+                    category="provider_unavailable",
+                    message="The model returned an empty answer. Please retry.",
+                    request_id=rid,
+                )
+            )
+            return
+
         cited_ids, invalid = extract_cited_evidence_ids(answer, r.evidence)
         if invalid:
             log.warning("model cited unknown evidence", extra={"request_id": rid, "labels": invalid})
@@ -152,7 +197,7 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
                 "property_count": len(r.properties),
                 "answer_chars": len(answer),
                 "cited": len(cited_ids),
-                "model": used_model or settings.openrouter_model,
+                "model": used_model or default_model,
                 "finish_reason": finish_reason,
             },
         )
@@ -161,7 +206,7 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
             StreamDone(
                 citations=cited_ids,
                 property_ids=[p.id for p in r.properties],
-                model=used_model or settings.openrouter_model,
+                model=used_model or default_model,
                 finish_reason=finish_reason,
                 usage=usage,
                 request_id=rid,

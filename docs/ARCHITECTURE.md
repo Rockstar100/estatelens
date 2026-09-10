@@ -13,8 +13,9 @@
                      │    └─ GET  /api/health, /api/readiness                                   │
                      │            │                     │                                      │
                      │            ▼                     ▼                                      │
-                     │   retrieval pipeline      OpenRouter client (free routes only)          │
-                     │   (structured + text)                                                   │
+                     │   retrieval pipeline      LLM client (Groq / Gemini / OpenRouter)       │
+                     │   (structured + text       OpenAI-compatible SSE stream                 │
+                     │    + optional embeddings)                                               │
                      └────────────┬───────────────────────────────────────────────────────────┘
                                   ▼
                          MongoDB (Atlas in prod)

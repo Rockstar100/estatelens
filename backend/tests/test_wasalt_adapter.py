@@ -53,9 +53,26 @@ def test_is_pdp_and_id_parsing():
     assert wasalt.property_id_from_url("https://wasalt.sa/en/property/rent/a-b-c-140463") == "140463"
 
 
+def test_image_from_classification_data():
+    data = {
+        "id": 5856589,
+        "classificationData": [
+            {"classificationName": "empty_room", "name": "aaaa.webp"},
+            {"classificationName": "facade", "name": "c8716042-91f6-465f-9a80-41890dd1d2ca.webp"},
+        ],
+        "propertyInfo": {},
+    }
+    url = wasalt._image_from_api_payload(data)
+    assert url is not None
+    assert "5856589" in url
+    assert "c8716042-91f6-465f-9a80-41890dd1d2ca.webp" in url
+    assert url.startswith("https://imagedelivery.net/")
+
+
 def test_missing_price_never_becomes_zero():
     data = _load("wasalt_sale.json")
     data["propertyInfo"]["salePrice"] = None
     data["propertyInfo"]["conversionPrice"] = None
     p = wasalt.build_from_api("https://wasalt.sa/en/property/sale/x-1", data).properties[0]
     assert p.price_amount is None
+

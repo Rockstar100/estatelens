@@ -20,6 +20,7 @@ markdown-it-py==4.2.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
 nh3==0.2.20
+numpy==2.5.3
 orjson==3.10.13
 packaging==26.3
 pluggy==1.6.0

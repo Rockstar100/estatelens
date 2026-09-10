@@ -10,11 +10,10 @@ import { Spinner } from "@/components/ui/primitives";
 
 const ERR_COPY: Record<string, string> = {
   quota_exhausted:
-    "The OpenRouter account's free quota is used up for now. This is an account limit — switching models will not help. Property browsing still works; try the chat again later.",
-  provider_unavailable:
-    "The AI model provider is unavailable right now. Property browsing still works; please retry shortly.",
+    "The free model quota is used up for now. Browsing still works; try the chat again later.",
+  provider_unavailable: "The model is unavailable right now. Browsing still works — please retry shortly.",
   timeout: "The model took too long to respond. Please try again.",
-  rate_limited: "You're sending messages a bit fast. Give it a few seconds and retry.",
+  rate_limited: "Too many messages. Wait a few seconds and retry.",
   internal: "Something went wrong handling that request.",
   bad_request: "That request could not be processed.",
 };
@@ -69,9 +68,9 @@ export function MessageBubble({
         ) : (
           <>
             {msg.evidence && msg.evidence.length > 0 && (
-              <details className="group mb-2" open>
-                <summary className="cursor-pointer list-none text-xs font-medium text-[var(--color-ink-soft)]">
-                  {msg.evidence.length} source passage{msg.evidence.length > 1 ? "s" : ""} used
+              <details className="group mb-2">
+                <summary className="cursor-pointer list-none text-xs font-medium text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]">
+                  {msg.evidence.length} source{msg.evidence.length > 1 ? "s" : ""}
                   <span className="ml-1 opacity-60 group-open:hidden">▸</span>
                   <span className="ml-1 hidden opacity-60 group-open:inline">▾</span>
                 </summary>
@@ -79,13 +78,13 @@ export function MessageBubble({
               </details>
             )}
 
-            <div className="markdown text-sm leading-relaxed">
+            <div className="markdown text-[15px] leading-relaxed">
               {renderWithCitations(msg.content, msg.evidence ?? [], onOpenEvidence)}
               {msg.pending && <span className="caret" />}
             </div>
 
             {msg.cards && msg.cards.length > 0 && (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid gap-2.5">
                 {msg.cards.map((p) => (
                   <PropertyCard
                     key={p.id}
@@ -122,7 +121,7 @@ export function MessageBubble({
 
             {msg.pending && !msg.content && (
               <p className="flex items-center gap-2 text-sm text-[var(--color-ink-soft)]">
-                <Spinner /> Searching collected sources…
+                <Spinner /> Searching…
               </p>
             )}
           </>

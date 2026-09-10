@@ -252,7 +252,7 @@ export function ExplorePage() {
           ) : items.length === 0 ? (
             <EmptyState
               title="No records match"
-              hint="Try removing a filter — for example a bedroom count or budget that no collected record meets."
+              hint="Try removing a filter."
               action={
                 activeCount > 0 ? (
                   <Button variant="outline" size="sm" onClick={clearFilters}>

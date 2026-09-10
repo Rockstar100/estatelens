@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
 import { useChat, useCompare } from "@/lib/store";
 import { getSources, streamChat, toWireMessages } from "@/lib/api";
 import type { ChatMessage, Property, SourcesResponse } from "@/types";
@@ -9,10 +8,10 @@ import { SourceDrawer, useSourceDrawer } from "@/components/chat/Citations";
 import { PropertyDetails } from "@/components/PropertyDetails";
 
 const FALLBACK_STARTERS = [
-  "Which collected DarGlobal projects mention waterfront or beachfront living?",
-  "Show Wasalt apartments for sale in Riyadh with 3 bedrooms.",
-  "What does Wasalt say about its services and licensing?",
-  "Compare two branded-residence developments from DarGlobal.",
+  "DarGlobal projects with waterfront living?",
+  "Wasalt apartments for sale in Riyadh",
+  "Cheapest Wasalt sale listing?",
+  "Compare two DarGlobal developments",
 ];
 
 export function ChatPage() {
@@ -52,13 +51,11 @@ export function ChatPage() {
     const cities = sources.sources.flatMap((s) => s.cities).filter(Boolean);
     const out: string[] = [];
     if (sources.sources.some((s) => s.source === "darglobal"))
-      out.push("Which collected DarGlobal projects mention waterfront or golf-course living?");
-    if (cities.includes("Riyadh"))
-      out.push("Show Wasalt listings for sale in Riyadh and note which have a listed price.");
-    else if (cities[0])
-      out.push(`Show Wasalt listings in ${cities[0]}.`);
-    out.push("What does Wasalt say about its services, licensing, or auctions?");
-    out.push("Compare the first two properties you show me.");
+      out.push("DarGlobal projects with waterfront or golf-course living?");
+    if (cities.includes("Riyadh")) out.push("Wasalt apartments for sale in Riyadh");
+    else if (cities[0]) out.push(`Wasalt listings in ${cities[0]}`);
+    out.push("Cheapest Wasalt sale listing?");
+    out.push("Compare the first two properties you show me");
     return out.slice(0, 4);
   }, [sources]);
 
@@ -176,17 +173,13 @@ export function ChatPage() {
         <div className="mx-auto w-full max-w-3xl px-4 py-6">
           {empty ? (
             <div className="pt-6 sm:pt-16">
-              <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--color-accent)_14%,white)] text-[var(--color-accent)]">
-                <Sparkles className="size-5" />
-              </div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Find your next property with evidence.
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
+                Ask about DarGlobal &amp; Wasalt properties
               </h1>
-              <p className="mt-2 max-w-lg text-[var(--color-ink-soft)]">
-                Explore information collected from DarGlobal and Wasalt, with sources behind every
-                answer.
+              <p className="mt-2 text-[var(--color-ink-soft)]">
+                Answers come only from collected public pages, with citations.
               </p>
-              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <div className="mt-6 grid gap-2 sm:grid-cols-2">
                 {starters.map((s) => (
                   <button
                     key={s}
@@ -197,14 +190,6 @@ export function ChatPage() {
                   </button>
                 ))}
               </div>
-              {sources && (
-                <p className="mt-4 text-xs text-[var(--color-ink-soft)]">
-                  Indexed now: {sources.total_properties} properties · {sources.total_passages}{" "}
-                  passages · retrieval is {sources.retrieval_method.toLowerCase().includes("lexical")
-                    ? "keyword + structured filters"
-                    : "structured"}.
-                </p>
-              )}
             </div>
           ) : (
             <div className="space-y-6">

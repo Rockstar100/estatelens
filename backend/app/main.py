@@ -68,15 +68,23 @@ _RATE_LIMIT_EXEMPT = (
 )
 
 
+def _is_rate_limit_exempt(path: str) -> bool:
+    if path in _RATE_LIMIT_EXEMPT:
+        return True
+    # Property photo thumbs are requested many-at-a-time by the SPA.
+    return path.startswith("/api/properties/") and path.endswith("/image")
+
+
+
 # A tight CSP: the SPA is fully self-hosted (no CDN, no inline scripts after the
 # Vite build), talks only to its own origin, and is never meant to be framed.
 _CSP = (
     "default-src 'self'; "
     "script-src 'self'; "
-    "style-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     "img-src 'self' data: https:; "
     "connect-src 'self'; "
-    "font-src 'self' data:; "
+    "font-src 'self' data: https://fonts.gstatic.com; "
     "frame-ancestors 'none'; "
     "base-uri 'self'; "
     "form-action 'self'"
@@ -92,7 +100,7 @@ _SECURITY_HEADERS = {
 @app.middleware("http")
 async def _security_and_rate_limit_mw(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith(_RATE_LIMIT_EXEMPT):
+    if path.startswith("/api/") and not _is_rate_limit_exempt(path):
         allowed, retry_after = api_limiter.check(client_key(request))
         if not allowed:
             return JSONResponse(

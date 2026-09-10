@@ -141,7 +141,15 @@ _STOPWORDS = {
     "tell", "me", "about", "show", "list", "give", "this", "that", "these", "those",
     "with", "by", "from", "its", "it", "collected", "source", "sources", "project",
     "projects", "property", "properties", "listing", "listings", "development",
-    "compare", "handover", "price", "prices", "located", "location", "date",
+    "developments", "compare", "handover", "price", "prices", "priced", "cost", "costs",
+    "located", "location", "date", "only", "just", "also", "now", "then", "than",
+    "least", "most", "more", "under", "over", "above", "below", "bedroom", "bedrooms",
+    "bathroom", "bathrooms", "apartment", "apartments", "villa", "villas", "studio",
+    "studios", "penthouse", "townhouse", "floor", "floors", "land", "sale", "rent",
+    "rental", "rentals", "wasalt", "darglobal", "dar", "global", "cheapest", "expensive",
+    "mention", "mentions", "waterfront", "golf", "course", "living", "unit", "units",
+    "starting", "started", "start", "listed", "according", "data", "record", "records",
+    "many", "much", "have", "has", "have", "been", "being", "vs", "versus", "between",
 }
 
 
@@ -151,44 +159,71 @@ async def find_properties_by_title(text: str, *, limit: int = 3) -> list["Proper
     substring on the longest non-stopword tokens; falls back to nothing."""
     import re as _re
 
-    tokens = [
-        t for t in _re.findall(r"[A-Za-z][A-Za-z'\-]{2,}", text)
-        if t.lower() not in _STOPWORDS
-    ]
+    tokens = []
+    for t in _re.findall(r"[A-Za-z][A-Za-z'\-]{2,}", text):
+        # Normalize possessives: "Neptune's" → "Neptune"
+        if t.lower().endswith("'s") and len(t) > 4:
+            t = t[:-2]
+        elif t.lower().endswith("s'") and len(t) > 4:
+            t = t[:-2]
+        if t.lower() not in _STOPWORDS:
+            tokens.append(t)
     tokens = sorted(set(tokens), key=len, reverse=True)[:6]
     if not tokens:
         return []
     db = get_db()
-    ors = [{"title": {"$regex": _re.escape(tok), "$options": "i"}} for tok in tokens]
-    # require at least two distinct token hits for multi-word names, else one
-    pipeline = [
-        {"$match": {"$or": ors}},
-        {
-            "$addFields": {
-                "_hits": {
-                    "$size": {
-                        "$filter": {
-                            "input": [
-                                {
-                                    "$regexMatch": {
-                                        "input": {"$toLower": "$title"},
-                                        "regex": _re.escape(tok.lower()),
+
+    async def _search(toks: list[str], min_hits: int, cap: int) -> list[tuple[Property, int]]:
+        if not toks:
+            return []
+        ors = [{"title": {"$regex": _re.escape(tok), "$options": "i"}} for tok in toks]
+        pipeline = [
+            {"$match": {"$or": ors}},
+            {
+                "$addFields": {
+                    "_hits": {
+                        "$size": {
+                            "$filter": {
+                                "input": [
+                                    {
+                                        "$regexMatch": {
+                                            "input": {"$toLower": "$title"},
+                                            "regex": _re.escape(tok.lower()),
+                                        }
                                     }
-                                }
-                                for tok in tokens
-                            ],
-                            "cond": "$$this",
+                                    for tok in toks
+                                ],
+                                "cond": "$$this",
+                            }
                         }
                     }
                 }
-            }
-        },
-        {"$match": {"_hits": {"$gte": 2 if len(tokens) >= 2 else 1}}},
-        {"$sort": {"_hits": -1}},
-        {"$limit": limit},
-    ]
-    cursor = await db.properties.aggregate(pipeline)
-    return [doc_to_property(d) async for d in cursor]
+            },
+            {"$match": {"_hits": {"$gte": min_hits}}},
+            {"$sort": {"_hits": -1}},
+            {"$limit": cap},
+        ]
+        out: list[tuple[Property, int]] = []
+        cursor = await db.properties.aggregate(pipeline)
+        async for d in cursor:
+            hits = int(d.pop("_hits", 0) or 0)
+            out.append((doc_to_property(d), hits))
+        return out
+
+    # Multi-token hits first (Trump + Tower + Jeddah), then strong single names
+    # (Neptune) so compare questions resolve every named project.
+    strong = [t for t in tokens if len(t) >= 5]
+    scored: dict[str, tuple[Property, int]] = {}
+    for prop, hits in await _search(tokens, min_hits=2 if len(strong) >= 2 else 1, cap=limit * 2):
+        scored[prop.id] = (prop, hits)
+    for tok in strong:
+        for prop, hits in await _search([tok], min_hits=1, cap=2):
+            prev = scored.get(prop.id)
+            if prev is None or hits > prev[1]:
+                scored[prop.id] = (prop, max(hits, prev[1] if prev else 0))
+
+    ranked = sorted(scored.values(), key=lambda x: (-x[1], x[0].title or ""))
+    return [p for p, _ in ranked[:limit]]
 
 
 async def query_properties(
@@ -202,19 +237,22 @@ async def query_properties(
     total = await db.properties.count_documents(mongo_filter)
     skip = max(page - 1, 0) * page_size
 
-    price_dir = next((d for f, d in (sort or []) if f == "price_amount"), None)
-    if price_dir is not None:
-        # MongoDB sorts NULL before numbers; for a "price" sort the user wants
-        # priced records ordered and the unpriced ones last, either direction.
-        # A two-key sort (has-price, then price) keeps nulls last both ways
-        # without an out-of-range numeric sentinel.
+    # MongoDB sorts NULL/missing before numbers; for a numeric sort the user
+    # wants the records that HAVE that value ordered, and the ones missing it
+    # last (either direction). A two-key sort (has-value, then value) does that
+    # without an out-of-range numeric sentinel. Applies to price and area.
+    num_field, num_dir = next(
+        ((f, d) for f, d in (sort or []) if f in ("price_amount", "area_value")),
+        (None, None),
+    )
+    if num_field is not None:
         pipeline = [
             {"$match": mongo_filter},
-            {"$addFields": {"_hasprice": {"$cond": [{"$eq": ["$price_amount", None]}, 1, 0]}}},
-            {"$sort": {"_hasprice": 1, "price_amount": price_dir, "_id": 1}},
+            {"$addFields": {"_hasval": {"$cond": [{"$eq": [f"${num_field}", None]}, 1, 0]}}},
+            {"$sort": {"_hasval": 1, num_field: num_dir, "_id": 1}},
             {"$skip": skip},
             {"$limit": page_size},
-            {"$project": {"_hasprice": 0}},
+            {"$project": {"_hasval": 0}},
         ]
         cursor = await db.properties.aggregate(pipeline)
         items = [doc_to_property(d) async for d in cursor]
