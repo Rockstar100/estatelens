@@ -188,9 +188,3 @@ docker run --rm -p 8000:8000 \
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, collections, security notes  
 - [docs/SUBMISSION.md](docs/SUBMISSION.md) — assignment checklist, coverage, test notes  
-
----
-
-## License / disclaimer
-
-Hiring / portfolio demo. Scraped content remains owned by the source sites; use only for evaluation of this codebase. Respect `robots.txt` and site terms if you re-run ingestion.
