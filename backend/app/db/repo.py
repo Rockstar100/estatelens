@@ -150,6 +150,11 @@ _STOPWORDS = {
     "mention", "mentions", "waterfront", "golf", "course", "living", "unit", "units",
     "starting", "started", "start", "listed", "according", "data", "record", "records",
     "many", "much", "have", "has", "have", "been", "being", "vs", "versus", "between",
+    "branded", "brand", "brands", "water", "near", "home", "homes", "house", "houses",
+    "buyer", "buyers", "advising", "advise", "shortlist", "fit", "fits", "want", "wants",
+    "sea", "beach", "ocean", "coastal", "seafront", "interiors",
+    "amenities", "amenity", "designer", "designers", "connected", "kind", "product",
+    "type", "types", "island", "marjan",
 }
 
 
@@ -245,6 +250,98 @@ async def find_properties_by_title(text: str, *, limit: int = 3) -> list["Proper
             continue
         seen_brand.add(brand)
         out.append(prop)
+        if len(out) >= limit:
+            break
+    return out
+
+
+_THEME_WATER = (
+    "seafront", "waterfront", "beach", "beachfront", "sea-view", "sea view",
+    "marina", "canal", "coastal", "cliff", "ocean", "harbour", "harbor",
+)
+_THEME_BRAND = (
+    "branded", "interiors by", "trump", "missoni", "pagani", "aston martin",
+    "lamborghini", "mouawad", "marriott", "elie saab", "w residences",
+)
+
+
+async def find_properties_by_theme(
+    text: str,
+    *,
+    limit: int = 8,
+    source: str | None = None,
+) -> list["Property"]:
+    """Match lifestyle themes (waterfront / branded) against title + description."""
+    import re as _re
+
+    low = text.lower()
+    want_water = bool(_re.search(
+        r"\b(water(?:front)?|sea(?:front)?|beach(?:front)?|ocean|marina|canal|"
+        r"coast(?:al)?|cliff|harbour|harbor)\b",
+        low,
+    ))
+    want_brand = bool(_re.search(
+        r"\b(branded|brand|interiors?\s+by|trump|missoni|pagani|aston\s+martin|"
+        r"lamborghini|mouawad|marriott|elie\s+saab)\b",
+        low,
+    ))
+    if not want_water and not want_brand:
+        return []
+
+    terms: list[str] = []
+    if want_water:
+        terms.extend(_THEME_WATER)
+    if want_brand and not want_water:
+        # Brand-only questions: prefer explicit brand cues in titles.
+        terms.extend(_THEME_BRAND)
+    if want_water and want_brand:
+        # Prefer water terms; brand is a soft preference in scoring below.
+        terms.extend(_THEME_WATER)
+
+    db = get_db()
+    ors = []
+    for term in terms:
+        esc = _re.escape(term)
+        ors.append({"title": {"$regex": esc, "$options": "i"}})
+        ors.append({"description": {"$regex": esc, "$options": "i"}})
+        ors.append({"amenities": {"$elemMatch": {"$regex": esc, "$options": "i"}}})
+    q: dict[str, Any] = {"$or": ors}
+    if source:
+        q["source"] = source
+    cursor = db.properties.find(q).limit(40)
+    scored: list[tuple[int, Property]] = []
+    async for d in cursor:
+        p = doc_to_property(d)
+        blob = " ".join(
+            x for x in [
+                p.title or "",
+                p.description or "",
+                " ".join(p.amenities or []),
+            ]
+        ).lower()
+        score = 0
+        if want_water:
+            score += sum(
+                2
+                for t in _THEME_WATER
+                if _re.search(rf"(?<![a-z]){_re.escape(t)}(?![a-z])", blob)
+            )
+        if want_brand:
+            score += sum(
+                1
+                for t in _THEME_BRAND
+                if _re.search(rf"(?<![a-z]){_re.escape(t)}(?![a-z])", blob)
+            )
+        if score:
+            scored.append((score, p))
+    scored.sort(key=lambda x: (-x[0], x[1].title or ""))
+    out: list[Property] = []
+    seen: set[str] = set()
+    for _sc, p in scored:
+        if p.id in seen:
+            continue
+        seen.add(p.id)
+        out.append(p)
         if len(out) >= limit:
             break
     return out

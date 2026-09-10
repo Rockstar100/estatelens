@@ -128,6 +128,7 @@ def test_should_carry_filters():
     assert should_carry_filters("reset filters") is False
     assert should_carry_filters("What about the designer interiors at Missoni?") is False
     assert should_carry_filters("Tell me more about Trump Tower Jeddah") is False
+    assert should_carry_filters("branded DarGlobal home near water") is False
 
 
 def test_nlu_sale_price_not_transaction():

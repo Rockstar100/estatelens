@@ -210,6 +210,7 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
                 finish_reason=finish_reason,
                 usage=usage,
                 request_id=rid,
+                answer=answer,
             )
         )
 

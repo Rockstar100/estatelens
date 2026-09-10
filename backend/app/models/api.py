@@ -92,6 +92,9 @@ class StreamDone(BaseModel):
     finish_reason: str | None = None
     usage: dict | None = None
     request_id: str | None = None
+    # Final cleaned answer (reasoning preamble stripped). Client replaces the
+    # streamed bubble with this when present so the UI matches citations.
+    answer: str | None = None
 
 
 class StreamError(BaseModel):

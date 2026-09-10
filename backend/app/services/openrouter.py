@@ -180,10 +180,9 @@ class LLMClient:
                             break
                         if exc.category == "rate_limited" or "rate limit" in exc.message.lower():
                             attempt += 1
-                            if attempt > max_retries + 1:
+                            if attempt > max_retries:
                                 break
-                            # Keep sleeps short so the UI isn't stuck on "Writing answer…"
-                            await asyncio.sleep(min(1.5 * (2 ** attempt), 8))
+                            await asyncio.sleep(min(1.2 * attempt, 4))
                             continue
                         attempt += 1
                         if attempt > max_retries:

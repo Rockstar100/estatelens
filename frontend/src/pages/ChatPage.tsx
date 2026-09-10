@@ -27,10 +27,21 @@ function shouldCarryFilters(text: string): boolean {
   if (/\b(start over|reset|clear filters?|show (?:me )?all|never ?mind)\b/.test(low)) return false;
   if (/\b(compare|versus|vs\.?)\b/.test(low)) return false;
   if (
+    /\b(water(?:front)?|sea(?:front)?|beach(?:front)?|ocean|marina|canal|coast(?:al)?|cliff|branded|near\s+water)\b/.test(
+      low,
+    )
+  ) {
+    return false;
+  }
+  const named =
+    /\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia|da[vr]inci|mouawad|urban\s+(?:canyon|oasis)|maliha|muscat\s+bay|jeddah\s+tower|pagani|lamborghini|marriott|elie\s+saab|mulliner|tierra\s+viva|w\s+residences)\b/.test(
+      low,
+    );
+  if (
     /\b(what about|how about|only|just|those|these|them|same|still|narrow|filter|also show|instead)\b/.test(
       low,
     ) &&
-    !/\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia)\b/.test(low)
+    !named
   ) {
     return true;
   }
@@ -42,8 +53,12 @@ function shouldCarryFilters(text: string): boolean {
   ) {
     return false;
   }
-  if (/\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia)\b/.test(low)) return false;
+  if (named) return false;
   return true;
+}
+
+function newMsgId() {
+  return `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function ChatPage() {
@@ -105,15 +120,15 @@ export function ChatPage() {
         useChat.getState().conversations.find((c) => c.id === id)?.messages ?? []
       ).concat({ role: "user", content: clean } as ChatMessage);
 
-      const userMsg: ChatMessage = { role: "user", content: clean };
+      const userMsg: ChatMessage = { id: newMsgId(), role: "user", content: clean };
       appendMessage(id, userMsg);
-      appendMessage(id, { role: "assistant", content: "", pending: true });
+      appendMessage(id, { id: newMsgId(), role: "assistant", content: "", pending: true });
       setInput("");
       setStreaming(true);
 
       const lastAssistant = [...priorMsgs]
         .reverse()
-        .find((m) => m.role === "assistant" && !m.error);
+        .find((m) => m.role === "assistant" && !m.error && !m.stopped);
       const context = {
         selected_property_ids: wantsCompareSelection(clean) ? compare.ids.slice(0, 3) : [],
         last_result_ids: (lastAssistant?.cards ?? []).map((p) => p.id),
@@ -135,11 +150,12 @@ export function ChatPage() {
           else if (e.type === "delta") {
             acc += e.text;
             updateLastAssistant(id!, { content: acc, pending: true });
-          } else if (e.type === "done")
+          }           else if (e.type === "done")
             updateLastAssistant(id!, {
               pending: false,
               citations: e.citations,
               model: e.model,
+              ...(e.answer ? { content: e.answer } : {}),
             });
           else if (e.type === "error")
             updateLastAssistant(id!, {
@@ -194,8 +210,9 @@ export function ChatPage() {
   }, []);
 
   const stop = () => {
-    // Clear pending before abort so onDone does not treat Stop as a failed answer.
-    if (activeId) updateLastAssistant(activeId, { pending: false });
+    // Mark stopped before abort so onDone does not treat Stop as a failed answer,
+    // and so truncated text is not reused as model history.
+    if (activeId) updateLastAssistant(activeId, { pending: false, stopped: true });
     abortRef.current?.();
     abortRef.current = null;
     setStreaming(false);
@@ -245,7 +262,7 @@ export function ChatPage() {
             <div className="space-y-6">
               {messages.map((m, i) => (
                 <MessageBubble
-                  key={i}
+                  key={m.id ?? `${i}-${m.role}-${m.content.slice(0, 24)}`}
                   msg={m}
                   onOpenEvidence={drawer.open}
                   onOpenProperty={setOpenProperty}

@@ -65,7 +65,15 @@ export function MessageBubble({
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <div>
               <p className="font-medium">AI answer unavailable</p>
-              <p className="mt-0.5 text-[13px]">{ERR_COPY[msg.error.category] ?? msg.error.message}</p>
+              <p className="mt-0.5 text-[13px]">
+                {ERR_COPY[msg.error.category] ?? msg.error.message}
+                {msg.error.message &&
+                ERR_COPY[msg.error.category] &&
+                !ERR_COPY[msg.error.category].includes(msg.error.message.slice(0, 24)) &&
+                /try again|retry|~\d/i.test(msg.error.message) ? (
+                  <> ({msg.error.message})</>
+                ) : null}
+              </p>
               {onRetry && (
                 <button
                   onClick={onRetry}

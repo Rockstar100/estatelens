@@ -91,7 +91,7 @@ async def sources() -> SourcesResponse:
         elif pref == "gemini" and settings.gemini_api_key:
             chain.append(f"gemini/{settings.gemini_model}")
         elif pref == "openrouter" and settings.openrouter_api_key:
-            chain.append(settings.openrouter_model)
+            chain.append(f"openrouter/{settings.openrouter_model}")
             if (
                 settings.openrouter_fallback_model
                 and settings.openrouter_fallback_model != settings.openrouter_model
@@ -104,19 +104,25 @@ async def sources() -> SourcesResponse:
         if settings.gemini_api_key:
             chain.append(f"gemini/{settings.gemini_model}")
         if settings.openrouter_api_key:
-            chain.append(settings.openrouter_model)
+            chain.append(f"openrouter/{settings.openrouter_model}")
             if (
                 settings.openrouter_fallback_model
                 and settings.openrouter_fallback_model != settings.openrouter_model
             ):
                 chain.append(f"openrouter/{settings.openrouter_fallback_model}")
     # Fallbacks = everyone in the real chain after the primary (exclude dupes).
-    seen: set[str] = {primary}
+    # Normalize primary label so "nvidia/…" matches "openrouter/nvidia/…".
+    primary_aliases = {primary, primary.removeprefix("openrouter/")}
+    if primary.startswith("openrouter/"):
+        primary_aliases.add(primary.split("/", 1)[-1])
+    seen: set[str] = set(primary_aliases)
     fallback_bits: list[str] = []
     for label in chain:
-        if label in seen:
+        bare = label.removeprefix("openrouter/")
+        if label in seen or bare in seen:
             continue
         seen.add(label)
+        seen.add(bare)
         fallback_bits.append(label)
 
     return SourcesResponse(

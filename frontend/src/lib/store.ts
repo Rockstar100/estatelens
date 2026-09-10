@@ -161,8 +161,11 @@ export const useCompare = create<CompareState>()(
             : { ids: [...s.ids, p.id], cache: { ...s.cache, [p.id]: p } },
         ),
       remove: (id) =>
-        set((s) => ({ ids: s.ids.filter((x) => x !== id) })),
-      clear: () => set({ ids: [] }),
+        set((s) => {
+          const { [id]: _drop, ...cache } = s.cache;
+          return { ids: s.ids.filter((x) => x !== id), cache };
+        }),
+      clear: () => set({ ids: [], cache: {} }),
       has: (id) => get().ids.includes(id),
     }),
     { name: "estatelens.compare" },

@@ -47,8 +47,11 @@ PROPERTY RECORD "transaction" field when present.
 markers in square brackets, e.g. [E2] or [E1][E3]. Use only E-numbers shown in \
 EVIDENCE this turn. If a fact comes only from a PROPERTY RECORD (no matching \
 passage), state it plainly with no bracket.
-- If neither EVIDENCE nor PROPERTY RECORDS contains the answer, say exactly: \
-"Not listed in the collected source."
+- If neither EVIDENCE nor PROPERTY RECORDS contains anything relevant to the \
+question, say exactly: "Not listed in the collected source."
+- If PROPERTY RECORDS or EVIDENCE clearly match the theme (e.g. seafront, \
+branded interiors, a named city), answer from those — do not abstain just \
+because a lifestyle word like "near water" is not a city name.
 - Never write a URL — the interface adds source links itself.
 - No confidence percentages, no investment advice.
 - Prices in different currencies or bases (total vs monthly rent vs \

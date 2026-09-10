@@ -119,6 +119,7 @@ export type StreamEvent =
       model: string | null;
       finish_reason: string | null;
       request_id: string | null;
+      answer?: string | null;
     }
   | {
       type: "error";
@@ -134,6 +135,7 @@ export type StreamEvent =
     };
 
 export interface ChatMessage {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   evidence?: EvidenceItem[];
@@ -143,6 +145,7 @@ export interface ChatMessage {
   error?: { category: string; message: string };
   model?: string | null;
   pending?: boolean;
+  stopped?: boolean;
 }
 
 export interface Conversation {

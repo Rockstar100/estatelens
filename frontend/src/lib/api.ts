@@ -181,6 +181,6 @@ export function toWireMessages(
   msgs: ChatMessage[],
 ): { role: "user" | "assistant"; content: string }[] {
   return msgs
-    .filter((m) => m.content.trim().length > 0 && !m.error)
+    .filter((m) => m.content.trim().length > 0 && !m.error && !m.stopped)
     .map((m) => ({ role: m.role, content: m.content }));
 }

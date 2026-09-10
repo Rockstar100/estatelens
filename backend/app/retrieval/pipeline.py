@@ -27,6 +27,7 @@ from app.models.api import EvidenceItem
 from app.models.property import Property
 from app.retrieval.filters import PropertyFilter, build_mongo_filter
 from app.retrieval.nlu import (
+    NAMED_PROJECT_RE,
     extract_filter,
     merge_filters,
     resolve_ordinal_reference,
@@ -109,11 +110,16 @@ _PLACE_IN_TEXT = re.compile(
     r"(?:the\s+)?([A-Za-z][A-Za-z]+(?:[ -][A-Za-z][A-Za-z]+){0,2})",
     re.I,
 )
-# Words that follow "in/at" but are not places.
+# Words that follow "in/at/near" but are not places.
 _NOT_A_PLACE = {
     "the", "this", "that", "riyal", "saudi", "sar", "aed", "usd", "each",
     "total", "cash", "stock", "general", "december", "january", "a", "an",
     "my", "our", "your", "their",
+    # Lifestyle / amenity nouns — "near water", "with golf", "by sea"
+    "water", "waterfront", "beach", "sea", "ocean", "coast", "coastal",
+    "golf", "marina", "harbour", "harbor", "lake", "river", "pool",
+    "view", "views", "downtown", "centre", "center", "city", "town",
+    "sale", "rent", "budget", "price", "home", "homes", "house", "houses",
 }
 
 
@@ -181,16 +187,7 @@ _AREA_RANK_CUE = re.compile(
     re.I,
 )
 _COMPARE_CUE = re.compile(r"\b(compare|versus|vs\.?|difference between)\b", re.I)
-# Strong named-project anchors that should win over city/type listing dumps.
-# Do NOT match bare source brands ("Wasalt apartments") — those are browse queries.
-_NAMED_PROJECT_HINT = re.compile(
-    r"\b("
-    r"trump\s+tower|neptune|missoni|astera|ayla(?:\s+oaks)?|ora\b|sidr|"
-    r"elenia|da[vr]inci|mouawad|urban\s+canyon|maliha|"
-    r"muscat\s+bay|jeddah\s+tower"
-    r")\b",
-    re.I,
-)
+_NAMED_PROJECT_HINT = re.compile(rf"\b({NAMED_PROJECT_RE})\b", re.I)
 
 
 async def retrieve(
@@ -266,11 +263,21 @@ async def retrieve(
     named_ids = {p.id for p in named}
 
     # Listing intent: ranked queries, or structured browse without a confident
-    # named-project hit. "amenities at Trump Tower" must not dump Jeddah listings.
+    # named-project / lifestyle-theme hit.
+    theme_led = bool(
+        re.search(
+            r"\b(water(?:front)?|sea(?:front)?|beach(?:front)?|ocean|marina|canal|"
+            r"coast(?:al)?|cliff|branded|near\s+water)\b",
+            user_text,
+            re.I,
+        )
+    )
     wants_listings = ranked or (
-        strong_structured and not (named_ids and project_hint)
+        strong_structured
+        and not (named_ids and project_hint)
+        and not theme_led
     ) or (
-        listing_cue and strong_structured and not named_ids
+        listing_cue and strong_structured and not named_ids and not theme_led
     )
 
     # A query scoped to a place we have nothing for ("apartments in Cairo") must
@@ -303,9 +310,24 @@ async def retrieve(
         if p.id not in {x.id for x in properties}:
             properties.append(p)
 
+    # Theme browse: "branded … near water" / seafront / beach — pull matching
+    # developments even when NLU has no city filter.
+    theme_hits: list[Property] = []
+    if not ranked and not (named_ids and project_hint):
+        theme_source = merged.source.value if merged.source else (
+            "darglobal" if re.search(r"\bdar\s?global\b", user_text, re.I) else None
+        )
+        theme_hits = await repo.find_properties_by_theme(
+            user_text, limit=8, source=theme_source
+        )
+        for p in theme_hits:
+            if p.id not in {x.id for x in properties}:
+                properties.append(p)
+
     ranked_hits: list[Property] = []
     # Compare-tray ids must not alone trigger a city/filter listing dump.
-    if wants_listings or ranked:
+    # Theme-led questions skip the broad filter dump entirely.
+    if (wants_listings or ranked) and not theme_led:
         page_items, _total = await repo.query_properties(
             mongo_filter, page=1, page_size=12, sort=sort_spec
         )
@@ -316,7 +338,9 @@ async def retrieve(
 
     # Named matches first so the model sees the asked-about record before a
     # broad filter dump (unless a ranked query needs price/area order).
-    if named and not ranked:
+    # Theme shortlists ("branded near water") win over a weak title hit on the
+    # word "branded" alone (e.g. Neptune) when no specific project was named.
+    if named and not ranked and not theme_led and not (theme_hits and not project_hint):
         named_first = [p for p in named]
         rest = [p for p in properties if p.id not in named_ids]
         properties = named_first + rest
@@ -332,7 +356,23 @@ async def retrieve(
     # Model context: keep enough records to answer. UI cards: only for browse /
     # compare / selection — not for every factual "where is X" turn.
     selected_set = set(selected_ids)
-    if wants_listings or ranked:
+    theme_shortlist = bool(theme_hits) and not ranked and not (
+        named_ids and project_hint
+    ) and (theme_led or not wants_listings)
+    if theme_shortlist:
+        # Theme questions win over a sticky/type-driven listing dump.
+        theme_ids = {p.id for p in theme_hits}
+        properties = theme_hits + [p for p in properties if p.id not in theme_ids]
+        result.properties = properties[:6]
+        result.cards = properties[:4]
+        for k in ("city", "district", "country", "property_type", "bedrooms", "bedrooms_min"):
+            result.applied_filters.pop(k, None)
+        # Don't echo title-derived place filters as "applied" notes.
+        result.filter_notes = [
+            n for n in result.filter_notes
+            if not n.lower().startswith(("city =", "district =", "country ="))
+        ]
+    elif wants_listings or ranked:
         result.properties = properties[:6]
         result.cards = result.properties[:]
     elif compare_cue and (named or selected_ids):
@@ -347,6 +387,16 @@ async def retrieve(
             val = result.applied_filters.get(k)
             if val and any(str(val).lower() in (p.title or "").lower() for p in named):
                 result.applied_filters.pop(k, None)
+        result.filter_notes = [
+            n for n in result.filter_notes
+            if not (
+                n.lower().startswith("city =")
+                and any(
+                    n.split("=", 1)[-1].strip().lower() in (p.title or "").lower()
+                    for p in named
+                )
+            )
+        ]
     elif selected_ids and not named:
         # "these" / tray focus without a new named project.
         picked = [p for p in properties if p.id in selected_set][:3]
@@ -361,6 +411,10 @@ async def retrieve(
         # X"; do not stick them into conversation filters for the next turn.
         for k in ("city", "district", "country", "property_type"):
             result.applied_filters.pop(k, None)
+        result.filter_notes = [
+            n for n in result.filter_notes
+            if not n.lower().startswith(("city =", "district =", "country =", "property_type ="))
+        ]
     elif 0 < len(properties) <= 3:
         result.properties = properties[:3]
         result.cards = []
@@ -370,6 +424,10 @@ async def retrieve(
 
     # --- passage keyword search --------------------------------------
     search_terms = merged.text or user_text
+    if theme_hits and re.search(
+        r"\b(water(?:front)?|sea(?:front)?|beach|branded|coastal)\b", user_text, re.I
+    ):
+        search_terms = f"{search_terms} seafront waterfront beach branded marina"
     sources = [merged.source.value] if merged.source else None
     scored = await repo.search_passages(search_terms, limit=limit * 3, sources=sources)
 

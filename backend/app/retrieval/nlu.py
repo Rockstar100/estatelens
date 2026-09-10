@@ -230,6 +230,20 @@ def merge_filters(base: PropertyFilter, update: PropertyFilter) -> PropertyFilte
     return PropertyFilter.model_validate(merged)
 
 
+# Shared named-project / brand anchors (also mirrored lightly in the SPA).
+NAMED_PROJECT_RE = (
+    r"trump\s+tower|neptune|missoni|astera|ayla(?:\s+oaks)?|ora\b|sidr|"
+    r"elenia|da[vr]inci|mouawad|urban\s+(?:canyon|oasis)|maliha|"
+    r"muscat\s+bay|jeddah\s+tower|pagani|lamborghini|marriott|"
+    r"elie\s+saab|mulliner|tierra\s+viva|w\s+residences"
+)
+
+_THEME_LIFESTYLE_RE = (
+    r"\b(water(?:front)?|sea(?:front)?|beach(?:front)?|ocean|marina|canal|"
+    r"coast(?:al)?|cliff|harbour|harbor|branded|near\s+water)\b"
+)
+
+
 def should_carry_filters(user_text: str) -> bool:
     """Whether a follow-up should inherit the previous turn's structured filters."""
     low = user_text.lower()
@@ -240,15 +254,15 @@ def should_carry_filters(user_text: str) -> bool:
         return False
     if re.search(r"\b(compare|versus|vs\.?)\b", low):
         return False
+    # Lifestyle / theme shortlists must not inherit a prior city/type lock.
+    if re.search(_THEME_LIFESTYLE_RE, low):
+        return False
     # Refine phrases keep prior filters ("what about 3 bedrooms").
     if re.search(
         r"\b(what about|how about|only|just|those|these|them|same|still|"
         r"narrow|filter|also show|instead)\b",
         low,
-    ) and not re.search(
-        r"\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia)\b",
-        low,
-    ):
+    ) and not re.search(rf"\b({NAMED_PROJECT_RE})\b", low):
         return True
     # Named-project / factual questions should not keep a prior city/source lock.
     if re.search(
@@ -260,9 +274,6 @@ def should_carry_filters(user_text: str) -> bool:
         low,
     ):
         return False
-    if re.search(
-        r"\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia)\b",
-        low,
-    ):
+    if re.search(rf"\b({NAMED_PROJECT_RE})\b", low):
         return False
     return True
