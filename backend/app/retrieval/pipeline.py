@@ -29,13 +29,30 @@ from app.retrieval.filters import PropertyFilter, build_mongo_filter
 from app.retrieval.nlu import extract_filter, merge_filters, resolve_ordinal_reference
 from app.retrieval.semantic import semantic_scores
 
-RETRIEVAL_METHOD = (
-    "Structured MongoDB filtering over normalized property records plus MongoDB "
-    "text-index keyword search over source passages. This is lexical retrieval, "
-    "not vector/semantic search."
-)
-
 _SITE = {"darglobal": "DarGlobal", "wasalt": "Wasalt"}
+
+
+def retrieval_method_description() -> str:
+    """Plain-language retrieval blurb for Sources / evidence events."""
+    settings = get_settings()
+    base = (
+        "Structured MongoDB filtering over normalized property records plus MongoDB "
+        "text-index keyword search over source passages"
+    )
+    if settings.embeddings_configured:
+        return (
+            f"{base}, optionally blended with Gemini passage embeddings "
+            f"({settings.embedding_model}) when vectors are indexed via the embed CLI. "
+            "Without indexed vectors the keyword path alone is used."
+        )
+    return (
+        f"{base}. Lexical retrieval only "
+        "(semantic blending off or no embedding API key)."
+    )
+
+
+# Back-compat for imports that still expect a module-level string.
+RETRIEVAL_METHOD = retrieval_method_description()
 
 
 @dataclass
@@ -139,10 +156,12 @@ def _safe_context_filter(raw: object) -> PropertyFilter:
                 clean.pop(k, None)
 
 
+# Bare "any"/"available"/"under"/"over" are too common in factual prose.
 _LISTING_CUE = re.compile(
-    r"\b(show|list|find|search|browse|looking for|any|available|"
-    r"properties|listings|apartments|villas|units|results|under|over|"
-    r"cheapest|most expensive|largest|smallest)\b",
+    r"\b(show|list|find|search|browse|looking for|"
+    r"properties|listings|apartments|villas|units|results|"
+    r"cheapest|most expensive|largest|smallest|"
+    r"(?:under|below|over|above)\s+[\d$£])\b",
     re.I,
 )
 _COMPARE_CUE = re.compile(r"\b(compare|versus|vs\.?|difference between)\b", re.I)
@@ -210,9 +229,14 @@ async def retrieve(
 
     # A query scoped to a place we have nothing for ("apartments in Cairo") must
     # abstain, not fall back to showing unrelated records from other cities.
+    # Do not treat a named development title ("amenities at Neptune") as a city.
     bad_place = None
     if not (merged.city or merged.district or merged.country):
         bad_place = _unknown_location(user_text, await _known_places())
+        if bad_place and named and any(
+            bad_place.lower() in (p.title or "").lower() for p in named
+        ):
+            bad_place = None
     if bad_place:
         wants_listings = False
         result.filter_notes = [f"no collected records in {bad_place}"]
@@ -234,7 +258,8 @@ async def retrieve(
             properties.append(p)
 
     ranked_hits: list[Property] = []
-    if wants_listings or selected_ids:
+    # Compare-tray ids must not alone trigger a city/filter listing dump.
+    if wants_listings or ranked:
         page_items, _total = await repo.query_properties(
             mongo_filter, page=1, page_size=12, sort=sort_spec
         )
@@ -260,17 +285,31 @@ async def retrieve(
 
     # Model context: keep enough records to answer. UI cards: only for browse /
     # compare / selection — not for every factual "where is X" turn.
-    if selected_ids or wants_listings or ranked:
+    selected_set = set(selected_ids)
+    if wants_listings or ranked:
         result.properties = properties[:6]
         result.cards = result.properties[:]
-    elif compare_cue and named:
-        result.properties = properties[:4]
+    elif compare_cue and (named or selected_ids):
+        # Explicit compare — tray ids + named projects, capped.
+        ordered = [p for p in properties if p.id in selected_set] + [
+            p for p in properties if p.id not in selected_set
+        ]
+        result.properties = ordered[:4]
         result.cards = result.properties[:]
+    elif selected_ids and not named:
+        # "these" / tray focus without a new named project.
+        picked = [p for p in properties if p.id in selected_set][:3]
+        result.properties = picked
+        result.cards = picked
     elif named:
         # Factual question about a named project — one best match for context
         # (+ optional second for disambiguation), no card flood.
         result.properties = named[:2]
         result.cards = named[:1]
+        # City/district often come from the project title ("… Jeddah"); do not
+        # stick them into conversation filters for the next turn.
+        for k in ("city", "district", "country"):
+            result.applied_filters.pop(k, None)
     elif 0 < len(properties) <= 3:
         result.properties = properties[:3]
         result.cards = []

@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     properties_page_size_max: int = Field(default=48, alias="PROPERTIES_PAGE_SIZE_MAX")
 
     # --- Rate limiting (in-memory, single instance) -----------------
-    rate_limit_chat_per_minute: int = Field(default=12, alias="RATE_LIMIT_CHAT_PER_MINUTE")
+    rate_limit_chat_per_minute: int = Field(default=30, alias="RATE_LIMIT_CHAT_PER_MINUTE")
     rate_limit_api_per_minute: int = Field(default=120, alias="RATE_LIMIT_API_PER_MINUTE")
 
     # --- Scraper (ingestion CLI only) ------------------------------

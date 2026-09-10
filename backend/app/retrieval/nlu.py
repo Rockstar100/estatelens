@@ -19,16 +19,16 @@ _MULTIPLIERS = {
     "m": Decimal(1_000_000),
     "mn": Decimal(1_000_000),
     "million": Decimal(1_000_000),
-    "b": Decimal(1_000_000_000),
+    # bare "b" omitted — it matches the start of "bedrooms"
     "bn": Decimal(1_000_000_000),
     "billion": Decimal(1_000_000_000),
 }
 
 _CURRENCY_WORDS = {
     "aed": "AED", "dirham": "AED", "dirhams": "AED",
-    "sar": "SAR", "riyal": "SAR", "riyals": "SAR", "sr": "SAR",
-    "usd": "USD", "dollar": "USD", "dollars": "USD", "$": "USD",
-    "gbp": "GBP", "pound": "GBP", "pounds": "GBP", "£": "GBP",
+    "sar": "SAR", "riyal": "SAR", "riyals": "SAR",
+    "usd": "USD", "dollar": "USD", "dollars": "USD",
+    "gbp": "GBP", "pound": "GBP", "pounds": "GBP",
     "eur": "EUR", "euro": "EUR", "euros": "EUR",
     "qar": "QAR",
 }
@@ -48,6 +48,8 @@ _ORDINALS = {
     "last": -1,
 }
 
+_UNIT_AFTER_AMOUNT = re.compile(r"\s*(bed|br|bhk|bath|sq|m2|metre|meter|year|month)")
+
 
 def _parse_amount(raw: str, suffix: str | None) -> Decimal | None:
     try:
@@ -57,6 +59,11 @@ def _parse_amount(raw: str, suffix: str | None) -> Decimal | None:
     if suffix:
         value *= _MULTIPLIERS.get(suffix.lower(), Decimal(1))
     return value
+
+
+def _looks_like_unit_amount(match: re.Match[str], text: str) -> bool:
+    """True when the number is a bed/bath/area count, not money."""
+    return bool(_UNIT_AFTER_AMOUNT.match(text[match.end() : match.end() + 16]))
 
 
 def extract_filter(text: str, known_cities: list[str] | None = None) -> PropertyFilter:
@@ -70,13 +77,14 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
         data["source"] = Source.WASALT
 
     # --- transaction type ------------------------------------------
-    # "for sale or for rent" / "sale or rent" asks which applies — do not
-    # lock the filter to one side (that drops the named property entirely).
     asking_tx = re.search(
         r"\b(?:for\s+)?sale\s+or\s+(?:for\s+)?rent\b"
         r"|\b(?:for\s+)?rent\s+or\s+(?:for\s+)?sale\b"
-        r"|\bsale\s*/\s*rent\b"
-        r"|\brent\s*/\s*sale\b",
+        r"|\bbuy\s+or\s+(?:rent|lease)\b"
+        r"|\b(?:rent|lease)\s+or\s+buy\b"
+        r"|\bpurchase\s+or\s+(?:rent|lease)\b"
+        r"|\bsale\s*(?:/|versus|vs\.?)\s*rent\b"
+        r"|\brent\s*(?:/|versus|vs\.?)\s*sale\b",
         lowered,
     )
     if asking_tx:
@@ -100,7 +108,6 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
         data["record_type"] = RecordType.LISTING
 
     # --- bedrooms ---------------------------------------------
-    # Accepts "3 bed", "3-bedroom", "3br", "3 bhk", "3+ bedrooms".
     bed = re.search(r"\b(\d{1,2})\s*(?:\+)?[\s-]*(?:bed(?:room)?s?|br|bhk)\b", lowered)
     if bed:
         n = int(bed.group(1))
@@ -108,7 +115,7 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
             data["bedrooms_min"] = n
         else:
             data["bedrooms"] = n
-    elif "studio" in lowered:
+    elif re.search(r"\bstudio\b", lowered):
         data["bedrooms"] = 0
 
     # --- property type -----------------------------------------
@@ -117,11 +124,15 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
             data["property_type"] = pt
             break
 
-    # --- currency ---------------------------------------------
+    # --- currency (word boundaries — avoid "europe" → EUR) ------
     for word, code in _CURRENCY_WORDS.items():
-        if word in lowered:
+        if re.search(rf"(?<![a-z]){re.escape(word)}(?![a-z])", lowered):
             data["currency"] = code
             break
+    if "$" in text:
+        data.setdefault("currency", "USD")
+    if "£" in text:
+        data.setdefault("currency", "GBP")
 
     # --- budget ---------------------------------------------
     money = re.search(
@@ -130,30 +141,21 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
         r"([\d,]+(?:\.\d+)?)\s*(k|thousand|m|mn|million|bn|billion)?\b",
         lowered,
     )
-    if money:
+    if money and not _looks_like_unit_amount(money, lowered):
         amount = _parse_amount(money.group(1), money.group(2))
-        if amount and amount > 0:
+        if amount and amount > 0 and (money.group(2) or amount >= 1000 or data.get("currency")):
             data["budget_max"] = amount
+
     over = re.search(
         r"(?:over|above|more than|at least|from)\s*"
         r"(?:aed|sar|usd|gbp|eur|qar|sr|\$|£)?\s*"
         r"([\d,]+(?:\.\d+)?)\s*(k|thousand|m|mn|million|bn|billion)?\b",
         lowered,
     )
-    if over:
-        # "at least 3 bedrooms" must not parse as "3 billion" via a bare "b".
-        # Only treat as money when a currency marker or magnitude suffix is present,
-        # or the number is clearly monetary (>= 1000 without a unit word after).
-        raw_n, suf = over.group(1), over.group(2)
-        after = lowered[over.end() : over.end() + 16]
-        if re.match(r"\s*(bed|br|bhk|bath|sq)", after):
-            pass
-        else:
-            amount = _parse_amount(raw_n, suf)
-            if amount and amount > 0:
-                # bare small integers without suffix/currency are bedroom-like, skip
-                if suf or amount >= 1000:
-                    data["budget_min"] = amount
+    if over and not _looks_like_unit_amount(over, lowered):
+        amount = _parse_amount(over.group(1), over.group(2))
+        if amount and amount > 0 and (over.group(2) or amount >= 1000 or data.get("currency")):
+            data["budget_min"] = amount
 
     # --- city -----------------------------------------------
     for city in known_cities or []:
@@ -162,7 +164,10 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
             break
 
     # --- superlatives -> sort ------------------------------
-    if re.search(r"\b(cheapest|lowest[- ]?priced?|least expensive|most affordable|budget)\b", lowered):
+    if re.search(
+        r"\b(cheapest|lowest[- ]?priced?|least expensive|most affordable|budget[- ]friendly)\b",
+        lowered,
+    ):
         data["sort"] = "price_asc"
     elif re.search(r"\b(most expensive|priciest|highest[- ]?priced?|dearest|top[- ]?priced?)\b", lowered):
         data["sort"] = "price_desc"
@@ -185,12 +190,20 @@ def resolve_ordinal_reference(text: str, ordered_ids: list[str]) -> list[str]:
     lowered = text.lower()
     picked: list[str] = []
     for word, idx in _ORDINALS.items():
-        if re.search(rf"\b{re.escape(word)}\b", lowered):
-            try:
-                picked.append(ordered_ids[idx])
-            except IndexError:
-                continue
-    # de-dupe, preserve order
+        if not re.search(
+            rf"\b(?:the|this|that)\s+{re.escape(word)}\b"
+            rf"|\b{re.escape(word)}\s+(?:one|result|listing|property|project|option)\b"
+            rf"|\b(?:and|,)\s+{re.escape(word)}\b"
+            rf"|\b#{idx + 1}\b",
+            lowered,
+        ):
+            continue
+        if re.search(rf"\b{re.escape(word)}\s+(?:bedroom|bath|time|week|month|year|day)\b", lowered):
+            continue
+        try:
+            picked.append(ordered_ids[idx])
+        except IndexError:
+            continue
     seen: set[str] = set()
     return [i for i in picked if not (i in seen or seen.add(i))]
 
@@ -201,9 +214,28 @@ def merge_filters(base: PropertyFilter, update: PropertyFilter) -> PropertyFilte
     for key, value in update.model_dump().items():
         if value not in (None, "", "relevance"):
             merged[key] = value
-    # Exact bedroom count and a minimum are mutually exclusive — keep the latest.
     if update.bedrooms is not None:
         merged["bedrooms_min"] = None
     if update.bedrooms_min is not None and update.bedrooms is None:
         merged["bedrooms"] = None
     return PropertyFilter.model_validate(merged)
+
+
+def should_carry_filters(user_text: str) -> bool:
+    """Whether a follow-up should inherit the previous turn's structured filters."""
+    low = user_text.lower()
+    if re.search(
+        r"\b(start over|reset|clear filters?|show (?:me )?all|never ?mind)\b",
+        low,
+    ):
+        return False
+    if re.search(r"\b(compare|versus|vs\.?)\b", low):
+        return False
+    # Named-project factual questions should not keep a prior city/source lock.
+    if re.search(
+        r"\b(what|when|where|who|how)\b.+\b(handover|price|cost|located|location|"
+        r"designer|interiors?|developer|completion)\b",
+        low,
+    ) and not re.search(r"\b(what about|only|just|those|these|them|same|still)\b", low):
+        return False
+    return True

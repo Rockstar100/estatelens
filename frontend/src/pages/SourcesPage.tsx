@@ -70,7 +70,7 @@ export function SourcesPage() {
             },
             {
               t: "Free LLM provider",
-              d: `${data.model} · falls back across Groq / Gemini / OpenRouter free tiers.`,
+              d: `${data.model}${data.fallback_model && data.fallback_model !== "(none configured)" ? ` · then ${data.fallback_model}` : ""}.`,
             },
             {
               t: "Containerised with Docker",
@@ -167,7 +167,7 @@ export function SourcesPage() {
           <p className="text-sm text-[var(--color-ink-soft)]">
             Primary: <code className="text-[13px]">{data.model}</code>
             <br />
-            Fallback: <code className="text-[13px]">{data.fallback_model}</code>
+            Next in chain: <code className="text-[13px]">{data.fallback_model}</code>
             <br />
             Tested: {data.model_tested_on}
           </p>

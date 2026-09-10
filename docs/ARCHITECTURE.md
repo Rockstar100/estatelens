@@ -75,11 +75,12 @@ data.
 ## Retrieval method (stated plainly)
 
 Structured MongoDB filtering over `properties` + a MongoDB **text index** over
-`passages`. This is **lexical** retrieval. There is no vector/embedding search.
-Filters are built only from an allow-list of fields and operators
-(`app/retrieval/filters.py`); model output, if ever used for extraction, is
-parsed into a typed Pydantic schema first — model-generated queries are never
-executed.
+`passages` (lexical). When `SEMANTIC_RETRIEVAL` is on and Gemini embeddings are
+indexed (`embed` CLI), cosine similarity is blended with the keyword score as an
+optional hybrid layer; otherwise behaviour is lexical-only. Filters are built
+only from an allow-list of fields and operators (`app/retrieval/filters.py`);
+model output, if ever used for extraction, is parsed into a typed Pydantic
+schema first — model-generated queries are never executed.
 
 ## Security
 

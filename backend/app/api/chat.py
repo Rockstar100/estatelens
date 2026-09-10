@@ -31,7 +31,7 @@ from app.models.api import (
     StreamError,
     StreamEvidence,
 )
-from app.retrieval.pipeline import retrieve
+from app.retrieval.pipeline import retrieve, retrieval_method_description
 from app.services.logging import get_logger
 import re
 
@@ -92,7 +92,7 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
         yield _sse(
             StreamEvidence(
                 items=r.evidence,
-                retrieval_method="structured-filter + mongodb-text-search (lexical)",
+                retrieval_method=retrieval_method_description(),
                 applied_filters=r.applied_filters,
             )
         )

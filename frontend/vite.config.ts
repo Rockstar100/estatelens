@@ -17,6 +17,16 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8000",
         changeOrigin: true,
+        // Keep SSE chunks flushing; default proxy buffering stalls the chat UI.
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            const ct = proxyRes.headers["content-type"] || "";
+            if (ct.includes("text/event-stream")) {
+              proxyRes.headers["cache-control"] = "no-cache, no-transform";
+              proxyRes.headers["x-accel-buffering"] = "no";
+            }
+          });
+        },
       },
     },
   },

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -135,11 +136,17 @@ class LLMClient:
                 "or OPENROUTER_API_KEY in .env.",
             )
 
+        deadline = time.monotonic() + min(70.0, self._s.openrouter_timeout_seconds * 2.5)
         last_error: LLMError | None = None
         for provider in providers:
             for model in provider.models:
                 attempt = 0
                 while attempt <= max_retries:
+                    if time.monotonic() >= deadline:
+                        raise last_error or LLMError(
+                            "timeout",
+                            "Providers took too long. Please retry.",
+                        )
                     try:
                         emitted_text = False
                         async for chunk in self._stream_once(provider, model, messages):
@@ -169,14 +176,15 @@ class LLMClient:
                             break
                         if exc.category == "rate_limited" or "rate limit" in exc.message.lower():
                             attempt += 1
-                            if attempt > max_retries + 3:
+                            if attempt > max_retries + 1:
                                 break
-                            await asyncio.sleep(min(3 * (2 ** attempt), 45))
+                            # Keep sleeps short so the UI isn't stuck on "Writing answer…"
+                            await asyncio.sleep(min(1.5 * (2 ** attempt), 8))
                             continue
                         attempt += 1
                         if attempt > max_retries:
                             break
-                        await asyncio.sleep(min(2**attempt, 8))
+                        await asyncio.sleep(min(2**attempt, 4))
                 # next model / provider
             log.warning("llm provider exhausted", extra={"provider": provider.name})
 

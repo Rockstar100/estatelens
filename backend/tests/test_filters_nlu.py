@@ -100,5 +100,33 @@ def test_ordinal_reference_resolution():
     assert resolve_ordinal_reference("no ordinals here", ids) == []
 
 
+def test_nlu_under_bedrooms_not_budget():
+    f = extract_filter("apartments under 3 bedrooms in Riyadh", known_cities=["Riyadh"])
+    assert f.budget_max is None
+    assert f.bedrooms == 3 or f.bedrooms_min == 3
+
+
+def test_nlu_currency_not_substring():
+    assert extract_filter("properties in europe").currency is None
+    assert extract_filter("budget 500000 eur").currency == "EUR"
+
+
+def test_nlu_ordinal_not_bare_cardinal():
+    ids = ["a", "b", "c"]
+    assert resolve_ordinal_reference("the second one", ids) == ["b"]
+    assert resolve_ordinal_reference("one bedroom", ids) == []
+    assert resolve_ordinal_reference("second bedroom apartment", ids) == []
+
+
+def test_should_carry_filters():
+    from app.retrieval.nlu import should_carry_filters
+
+    assert should_carry_filters("what about 3 bedrooms") is True
+    assert should_carry_filters("only Riyadh") is True
+    assert should_carry_filters("When is the handover for Trump Tower Jeddah?") is False
+    assert should_carry_filters("compare the first two") is False
+    assert should_carry_filters("reset filters") is False
+
+
 def test_filter_rejects_unknown_sort():
     assert PropertyFilter(sort="; drop table").sort == "relevance"

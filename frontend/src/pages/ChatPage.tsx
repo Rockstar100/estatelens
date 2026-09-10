@@ -14,6 +14,29 @@ const FALLBACK_STARTERS = [
   "Compare two DarGlobal developments",
 ];
 
+/** Only send compare-tray ids when the user is clearly talking about them. */
+function wantsCompareSelection(text: string): boolean {
+  return /\b(compare|versus|vs\.?|difference between|these|those|selected|in (?:my )?compare|from (?:my )?compare)\b/i.test(
+    text,
+  );
+}
+
+/** Mirror backend should_carry_filters — don't sticky-lock on new factual turns. */
+function shouldCarryFilters(text: string): boolean {
+  const low = text.toLowerCase();
+  if (/\b(start over|reset|clear filters?|show (?:me )?all|never ?mind)\b/.test(low)) return false;
+  if (/\b(compare|versus|vs\.?)\b/.test(low)) return false;
+  if (
+    /\b(what|when|where|who|how)\b.+\b(handover|price|cost|located|location|designer|interiors?|developer|completion)\b/.test(
+      low,
+    ) &&
+    !/\b(what about|only|just|those|these|them|same|still)\b/.test(low)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function ChatPage() {
   const {
     conversations,
@@ -82,11 +105,10 @@ export function ChatPage() {
         .reverse()
         .find((m) => m.role === "assistant" && !m.error);
       const context = {
-        selected_property_ids: compare.ids.slice(0, 3),
+        selected_property_ids: wantsCompareSelection(clean) ? compare.ids.slice(0, 3) : [],
         last_result_ids: (lastAssistant?.cards ?? []).map((p) => p.id),
-        // carry the previous turn's structured filters so "only Riyadh" then
-        // "what about 3 bedrooms" refines rather than resets
-        filters: lastAssistant?.appliedFilters ?? {},
+        // carry filters only on refine turns — not on new named-project questions
+        filters: shouldCarryFilters(clean) ? (lastAssistant?.appliedFilters ?? {}) : {},
       };
 
       let acc = "";
@@ -118,7 +140,23 @@ export function ChatPage() {
         () => {
           setStreaming(false);
           abortRef.current = null;
-          updateLastAssistant(id!, { pending: false });
+          const live = useChat
+            .getState()
+            .conversations.find((c) => c.id === id)
+            ?.messages.slice()
+            .reverse()
+            .find((m) => m.role === "assistant");
+          if (live?.pending && !live.content.trim() && !live.error) {
+            updateLastAssistant(id!, {
+              pending: false,
+              error: {
+                category: "provider_unavailable",
+                message: "No answer was returned. Please retry.",
+              },
+            });
+          } else {
+            updateLastAssistant(id!, { pending: false });
+          }
           renameFromFirstMessage(id!);
         },
       );
@@ -145,10 +183,11 @@ export function ChatPage() {
   }, []);
 
   const stop = () => {
+    // Clear pending before abort so onDone does not treat Stop as a failed answer.
+    if (activeId) updateLastAssistant(activeId, { pending: false });
     abortRef.current?.();
     abortRef.current = null;
     setStreaming(false);
-    if (activeId) updateLastAssistant(activeId, { pending: false });
   };
 
   const retryLast = () => {

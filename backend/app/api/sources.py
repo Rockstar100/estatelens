@@ -9,11 +9,39 @@ from fastapi import APIRouter
 from app.config import get_settings
 from app.db import repo
 from app.models.api import SourceCoverage, SourcesResponse
-from app.retrieval.pipeline import RETRIEVAL_METHOD
+from app.retrieval.pipeline import retrieval_method_description
 
 router = APIRouter(tags=["sources"])
 
 _SITE = {"darglobal": "darglobal.co.uk", "wasalt": "wasalt.sa"}
+
+# Display fixes for cities corrupted by historical encoding glitches in Mongo.
+_CITY_ALIASES = {
+    "benahavis": "Benahavís",
+    "benahavís": "Benahavís",
+    "benahavã­s": "Benahavís",
+    "benahavÃ­s": "Benahavís",
+    "benahava-s": "Benahavís",
+}
+
+
+def _display_city(raw: str) -> str:
+    key = raw.strip()
+    low = key.lower()
+    if low in _CITY_ALIASES:
+        return _CITY_ALIASES[low]
+    # Fold accent / mojibake residue so "BenahavA-s" still maps.
+    folded = (
+        low.replace("í", "i")
+        .replace("ã­", "i")
+        .replace("Ã­", "i")
+        .replace("a-s", "is")
+        .replace(" ", "")
+    )
+    if folded.startswith("benahav") and folded.endswith("is"):
+        return "Benahavís"
+    return key
+
 
 # Recorded at implementation time — see docs/SUBMISSION.md. Kept here so the
 # Sources page always states exactly which model was tested and when.
@@ -35,7 +63,7 @@ async def sources() -> SourcesResponse:
             listing_count=r["listing_count"],
             development_count=r["development_count"],
             latest_collection=r["latest_collection"],
-            cities=r["cities"],
+            cities=sorted({_display_city(c) for c in r["cities"] if c}),
             record_types=r["record_types"],
             extraction_failures=r["extraction_failures"],
         )
@@ -53,22 +81,36 @@ async def sources() -> SourcesResponse:
         if not r["cities"]:
             gaps.append(f"{r['source']}: no city could be normalized for any record.")
 
-    fallback_bits = []
+    primary = settings.active_llm_label
+    chain: list[str] = []
     if settings.groq_api_key:
-        fallback_bits.append(f"groq/{settings.groq_model}")
+        chain.append(f"groq/{settings.groq_model}")
     if settings.gemini_api_key:
-        fallback_bits.append(f"gemini/{settings.gemini_model}")
+        chain.append(f"gemini/{settings.gemini_model}")
     if settings.openrouter_api_key:
-        fallback_bits.append(settings.openrouter_fallback_model)
+        chain.append(settings.openrouter_model)
+        if (
+            settings.openrouter_fallback_model
+            and settings.openrouter_fallback_model != settings.openrouter_model
+        ):
+            chain.append(f"openrouter/{settings.openrouter_fallback_model}")
+    # Fallbacks = everyone after the primary in the auto chain (exclude dupes).
+    seen: set[str] = {primary}
+    fallback_bits: list[str] = []
+    for label in chain:
+        if label in seen:
+            continue
+        seen.add(label)
+        fallback_bits.append(label)
 
     return SourcesResponse(
         sources=coverage,
         total_documents=counts["documents"],
         total_properties=counts["properties"],
         total_passages=counts["passages"],
-        retrieval_method=RETRIEVAL_METHOD,
-        model=settings.active_llm_label,
-        fallback_model=", ".join(fallback_bits) or settings.openrouter_fallback_model,
+        retrieval_method=retrieval_method_description(),
+        model=primary,
+        fallback_model=" → ".join(fallback_bits) if fallback_bits else "(none configured)",
         model_tested_on=MODEL_TESTED_ON,
         coverage_gaps=gaps,
         generated_at=datetime.now(timezone.utc),

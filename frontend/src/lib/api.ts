@@ -84,6 +84,12 @@ export function streamChat(
   onDone: () => void,
 ): () => void {
   const controller = new AbortController();
+  let timedOut = false;
+  // Hard ceiling so a provider backoff loop cannot leave "Searching…" forever.
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 75_000);
 
   (async () => {
     try {
@@ -141,7 +147,17 @@ export function streamChat(
       }
       onDone();
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
+      if ((err as Error).name === "AbortError") {
+        if (timedOut) {
+          onEvent({
+            type: "error",
+            category: "timeout",
+            message: "The model took too long to respond. Please try again.",
+            request_id: null,
+          });
+        }
+        // User Stop: ChatPage clears pending; no error toast.
+      } else {
         onEvent({
           type: "error",
           category: "internal",
@@ -150,10 +166,15 @@ export function streamChat(
         });
       }
       onDone();
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   })();
 
-  return () => controller.abort();
+  return () => {
+    window.clearTimeout(timeoutId);
+    controller.abort();
+  };
 }
 
 export function toWireMessages(

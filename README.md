@@ -116,7 +116,7 @@ python -m scripts.cli import-snapshot ../data/snapshots/full-YYYYMMDD.jsonl
 | Variable | Purpose |
 |---|---|
 | `LLM_PROVIDER` | `auto` (default: Groq → Gemini → OpenRouter) or `groq` / `gemini` / `openrouter` |
-| `GROQ_API_KEY` / `GROQ_MODEL` | Groq OpenAI-compatible chat (default `openai/gpt-oss-120b`) |
+| `GROQ_API_KEY` / `GROQ_MODEL` | Groq OpenAI-compatible chat (default `openai/gpt-oss-20b`) |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | Gemini chat + optional embeddings |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` / `OPENROUTER_FALLBACK_MODEL` | Free `:free` routes |
 | `MONGODB_URI` / `MONGODB_DATABASE` | Mongo connection |

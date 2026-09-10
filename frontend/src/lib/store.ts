@@ -100,6 +100,23 @@ export const useChat = create<ChatState>()(
     {
       name: "estatelens.conversations",
       partialize: (s) => ({ conversations: s.conversations, activeId: s.activeId }),
+      // A crashed/tab-closed stream can leave pending:true forever in localStorage.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<ChatState>;
+        const conversations = (p.conversations ?? current.conversations).map((c) => ({
+          ...c,
+          messages: c.messages.map((m) =>
+            m.role === "assistant" && m.pending ? { ...m, pending: false } : m,
+          ),
+        }));
+        return {
+          ...current,
+          ...p,
+          conversations,
+          activeId: p.activeId ?? current.activeId,
+          pendingPrompt: null,
+        };
+      },
     },
   ),
 );

@@ -13,7 +13,7 @@ const ERR_COPY: Record<string, string> = {
     "The free model quota is used up for now. Browsing still works; try the chat again later.",
   provider_unavailable: "The model is unavailable right now. Browsing still works — please retry shortly.",
   timeout: "The model took too long to respond. Please try again.",
-  rate_limited: "Too many messages. Wait a few seconds and retry.",
+  rate_limited: "The AI provider is busy right now. Wait a few seconds and retry.",
   internal: "Something went wrong handling that request.",
   bad_request: "That request could not be processed.",
 };
@@ -49,6 +49,17 @@ export function MessageBubble({
         <Sparkles className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
+        {msg.evidence && msg.evidence.length > 0 && (
+          <details className="group mb-2">
+            <summary className="cursor-pointer list-none text-xs font-medium text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]">
+              {msg.evidence.length} source{msg.evidence.length > 1 ? "s" : ""}
+              <span className="ml-1 opacity-60 group-open:hidden">▸</span>
+              <span className="ml-1 hidden opacity-60 group-open:inline">▾</span>
+            </summary>
+            <EvidenceList evidence={msg.evidence} onOpen={onOpenEvidence} />
+          </details>
+        )}
+
         {msg.error ? (
           <div className="flex items-start gap-2 rounded-[12px] border border-[#f0d9d5] bg-[#fdf3f2] px-3 py-2.5 text-sm text-[#8a2b21]">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -65,66 +76,55 @@ export function MessageBubble({
               )}
             </div>
           </div>
-        ) : (
-          <>
-            {msg.evidence && msg.evidence.length > 0 && (
-              <details className="group mb-2">
-                <summary className="cursor-pointer list-none text-xs font-medium text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]">
-                  {msg.evidence.length} source{msg.evidence.length > 1 ? "s" : ""}
-                  <span className="ml-1 opacity-60 group-open:hidden">▸</span>
-                  <span className="ml-1 hidden opacity-60 group-open:inline">▾</span>
-                </summary>
-                <EvidenceList evidence={msg.evidence} onOpen={onOpenEvidence} />
-              </details>
-            )}
+        ) : msg.content ? (
+          <div className="markdown text-[15px] leading-relaxed">
+            {renderWithCitations(msg.content, msg.evidence ?? [], onOpenEvidence)}
+            {msg.pending && <span className="caret" />}
+          </div>
+        ) : null}
 
-            <div className="markdown text-[15px] leading-relaxed">
-              {renderWithCitations(msg.content, msg.evidence ?? [], onOpenEvidence)}
-              {msg.pending && <span className="caret" />}
-            </div>
+        {/* Show the matched property while the model writes — pipeline already caps cards. */}
+        {msg.cards && msg.cards.length > 0 && (
+          <div className="mt-3 grid gap-2.5">
+            {msg.cards.map((p) => (
+              <PropertyCard
+                key={p.id}
+                property={p}
+                onOpen={onOpenProperty}
+                onAsk={onAskProperty}
+                compact
+              />
+            ))}
+          </div>
+        )}
 
-            {msg.cards && msg.cards.length > 0 && !msg.pending && (
-              <div className="mt-3 grid gap-2.5">
-                {msg.cards.map((p) => (
-                  <PropertyCard
-                    key={p.id}
-                    property={p}
-                    onOpen={onOpenProperty}
-                    onAsk={onAskProperty}
-                    compact
-                  />
-                ))}
-              </div>
+        {!msg.pending && !msg.error && msg.content && (
+          <div className="mt-2 flex items-center gap-3 text-xs text-[var(--color-ink-soft)]">
+            <button
+              className="inline-flex items-center gap-1 hover:text-[var(--color-ink)]"
+              onClick={() => {
+                navigator.clipboard.writeText(msg.content);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+            >
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              {copied ? "Copied" : "Copy"}
+            </button>
+            {onRetry && (
+              <button className="inline-flex items-center gap-1 hover:text-[var(--color-ink)]" onClick={onRetry}>
+                <RefreshCw className="size-3.5" /> Retry
+              </button>
             )}
+            {msg.model && <span className="ml-auto opacity-70">{msg.model}</span>}
+          </div>
+        )}
 
-            {!msg.pending && msg.content && (
-              <div className="mt-2 flex items-center gap-3 text-xs text-[var(--color-ink-soft)]">
-                <button
-                  className="inline-flex items-center gap-1 hover:text-[var(--color-ink)]"
-                  onClick={() => {
-                    navigator.clipboard.writeText(msg.content);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                  }}
-                >
-                  {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                  {copied ? "Copied" : "Copy"}
-                </button>
-                {onRetry && (
-                  <button className="inline-flex items-center gap-1 hover:text-[var(--color-ink)]" onClick={onRetry}>
-                    <RefreshCw className="size-3.5" /> Retry
-                  </button>
-                )}
-                {msg.model && <span className="ml-auto opacity-70">{msg.model}</span>}
-              </div>
-            )}
-
-            {msg.pending && !msg.content && (
-              <p className="flex items-center gap-2 text-sm text-[var(--color-ink-soft)]">
-                <Spinner /> Searching…
-              </p>
-            )}
-          </>
+        {msg.pending && !msg.content && !msg.error && (
+          <p className="mt-2 flex items-center gap-2 text-sm text-[var(--color-ink-soft)]">
+            <Spinner />
+            {msg.evidence?.length || msg.cards?.length ? "Writing answer…" : "Searching…"}
+          </p>
         )}
       </div>
     </div>
