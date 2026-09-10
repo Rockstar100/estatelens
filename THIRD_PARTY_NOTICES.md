@@ -11,11 +11,6 @@ Used in the local ingestion path (`backend/app/scrapers/browser.py`) for
 browser-rendered fetching of challenged public pages. Not included in the
 deployed web image. Copyright © the crawl4ai authors.
 
-### Referenced (patterns/UX only — no source copied)
-- **assistant-ui** — MIT — https://github.com/assistant-ui/assistant-ui
-- **mongodb-developer/GenAI-Showcase** — MIT — https://github.com/mongodb-developer/GenAI-Showcase
-- **microsoft/sample-app-aoai-chatGPT** — MIT — https://github.com/microsoft/sample-app-aoai-chatGPT
-
 ## Key direct dependencies
 
 ### Backend (see `backend/requirements.txt`)

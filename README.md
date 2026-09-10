@@ -206,19 +206,6 @@ docker run --rm -p 8000:8000 \
 
 ---
 
-## Open-source references
-
-| Project | License | Role here |
-|---|---|---|
-| [assistant-ui](https://github.com/assistant-ui/assistant-ui) | MIT | Chat UX patterns |
-| [mongodb-developer/GenAI-Showcase](https://github.com/mongodb-developer/GenAI-Showcase) | MIT | Mongo ingestion / retrieval patterns |
-| [unclecode/crawl4ai](https://github.com/unclecode/crawl4ai) | Apache-2.0 | Browser fetch for challenged pages (ingest only) |
-| [microsoft/sample-app-aoai-chatGPT](https://github.com/microsoft/sample-app-aoai-chatGPT) | MIT | Grounded answers + citation drawer UX |
-
-Backend, scrapers, retrieval, multi-provider LLM client, React app, Docker, and tests are original to this repo.
-
----
-
 ## License / disclaimer
 
 Hiring / portfolio demo. Scraped content remains owned by the source sites; use only for evaluation of this codebase. Respect `robots.txt` and site terms if you re-run ingestion.

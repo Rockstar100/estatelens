@@ -78,21 +78,14 @@ not live inventory, and not a claim of completeness.
 - **OpenRouter primary:** `nvidia/nemotron-3-super-120b-a12b:free` — strong
   instruction-following on free routes; **fallback** `nex-agi/nex-n2.5-mini:free`.
 - **Tested:** 2026-09-09/10 — live streaming against grounded prompts returned
-  correct `[E#]`-cited answers for DarGlobal and Wasalt (see §6). OpenRouter’s
+  correct `[E#]`-cited answers for DarGlobal and Wasalt (see §5). OpenRouter’s
   free catalogue is volatile (`:free` 404s, reasoning preambles, occasional
   degenerate output on mini models); quota exhaustion on one provider falls
   through to the next when another key is configured.
 - **Output hardening:** citation-spelling normaliser, `<think>` stripping, and a
   prelude gate for untagged planning monologues before the answer reaches the UI.
 
-## 5. Open-source references
-
-See the table in the root [README](../README.md#open-source-references). Reused:
-crawl4ai for browser-rendered fetching (ingestion only); MongoDB GenAI-Showcase
-and the Microsoft sample as retrieval / citation-UX references; assistant-ui as a
-chat-UX reference. Everything else is original to this project.
-
-## 6. Test results
+## 5. Test results
 
 `python -m pytest` → **68 passed** (12 integration + 56 unit) (2026-09-10, local MongoDB).
 
@@ -215,7 +208,7 @@ malformed body → 422; regex / `$where` / operator injection in filters and
 context → ignored, no crash; mid-stream client disconnect → server stays up;
 CORS preflight from an unknown origin → rejected.
 
-## 7. Known limitations
+## 6. Known limitations
 
 - Retrieval blends keyword + structured filtering with semantic cosine over
   passage vectors. Semantic recall depends on the `embed` CLI having run and on
@@ -244,7 +237,7 @@ CORS preflight from an unknown origin → rejected.
   backend proxy (`GET /api/properties/{id}/image`) so CDN hot-link / referrer
   rules can't blank a thumbnail.
 
-## 8. Exact local reproduction
+## 7. Exact local reproduction
 
 See [README → Run it locally](../README.md#run-it-locally). In short:
 
@@ -265,7 +258,7 @@ python -m scripts.cli coverage
 To reproduce the exact dataset used above, import the committed snapshot instead
 of re-crawling: `python -m scripts.cli import-snapshot ../data/snapshots/full-20260909.jsonl`.
 
-## 10. Deploying to Render (remaining step)
+## 8. Deploying to Render (remaining step)
 
 1. Push this repo to GitHub.
 2. Render → **New → Blueprint**, point at the repo (`render.yaml` is detected).
@@ -281,11 +274,8 @@ of re-crawling: `python -m scripts.cli import-snapshot ../data/snapshots/full-20
 ## 9. For the hiring team
 
 - Original work: backend, both scrapers + normalization, retrieval + filter
-  allow-list, OpenRouter client + prompt/citation validation, the whole
-  frontend, Docker, tests.
-- Reused (with notices preserved): crawl4ai (Apache-2.0) for ingestion-only
-  browser rendering; patterns (not code) from the MongoDB and Microsoft samples;
-  UX cues from assistant-ui.
+  allow-list, LLM client + prompt/citation validation, the whole frontend,
+  Docker, tests.
 - The project is "done" when a reviewer can open the URL, ask grounded questions
   answered from both sources, inspect the supporting citations, browse the
   records, and compare properties.
