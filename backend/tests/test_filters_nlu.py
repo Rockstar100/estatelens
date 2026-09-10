@@ -126,6 +126,20 @@ def test_should_carry_filters():
     assert should_carry_filters("When is the handover for Trump Tower Jeddah?") is False
     assert should_carry_filters("compare the first two") is False
     assert should_carry_filters("reset filters") is False
+    assert should_carry_filters("What about the designer interiors at Missoni?") is False
+    assert should_carry_filters("Tell me more about Trump Tower Jeddah") is False
+
+
+def test_nlu_sale_price_not_transaction():
+    assert extract_filter("What is the sale price of Trump Tower?").transaction_type is None
+    assert extract_filter("who rented this apartment?").transaction_type is None
+    assert extract_filter("apartments for sale in Riyadh").transaction_type == TransactionType.SALE
+
+
+def test_ordinal_skips_floor():
+    ids = ["a", "b", "c"]
+    assert resolve_ordinal_reference("tell me about the first floor unit", ids) == []
+    assert resolve_ordinal_reference("compare the first and third", ids) == ["a", "c"]
 
 
 def test_filter_rejects_unknown_sort():

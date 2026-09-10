@@ -26,7 +26,12 @@ from app.db import repo
 from app.models.api import EvidenceItem
 from app.models.property import Property
 from app.retrieval.filters import PropertyFilter, build_mongo_filter
-from app.retrieval.nlu import extract_filter, merge_filters, resolve_ordinal_reference
+from app.retrieval.nlu import (
+    extract_filter,
+    merge_filters,
+    resolve_ordinal_reference,
+    should_carry_filters,
+)
 from app.retrieval.semantic import semantic_scores
 
 _SITE = {"darglobal": "DarGlobal", "wasalt": "Wasalt"}
@@ -98,14 +103,17 @@ async def _known_places() -> set[str]:
 
 
 # "... in Cairo", "near Tokyo", "properties at Marbella" — capture the place.
+# Allow optional leading "the" and lowercase place names.
 _PLACE_IN_TEXT = re.compile(
     r"\b(?:in|at|near|around|within|located in|based in)\s+"
-    r"([A-Z][A-Za-z]+(?:[ -][A-Z][A-Za-z]+){0,2})"
+    r"(?:the\s+)?([A-Za-z][A-Za-z]+(?:[ -][A-Za-z][A-Za-z]+){0,2})",
+    re.I,
 )
 # Words that follow "in/at" but are not places.
 _NOT_A_PLACE = {
     "the", "this", "that", "riyal", "saudi", "sar", "aed", "usd", "each",
-    "total", "cash", "stock", "general", "december", "january",
+    "total", "cash", "stock", "general", "december", "january", "a", "an",
+    "my", "our", "your", "their",
 }
 
 
@@ -157,14 +165,32 @@ def _safe_context_filter(raw: object) -> PropertyFilter:
 
 
 # Bare "any"/"available"/"under"/"over" are too common in factual prose.
+# Prefer explicit browse verbs; property-type nouns alone are not enough when a
+# named project is also present (handled below via title match).
 _LISTING_CUE = re.compile(
     r"\b(show|list|find|search|browse|looking for|"
-    r"properties|listings|apartments|villas|units|results|"
-    r"cheapest|most expensive|largest|smallest|"
+    r"properties|listings|results|"
+    r"cheapest|most expensive|"
     r"(?:under|below|over|above)\s+[\d$£])\b",
     re.I,
 )
+# Size superlatives only count as listing intent when not asking about coverage.
+_AREA_RANK_CUE = re.compile(
+    r"\b(largest|biggest|most spacious|widest|smallest|most compact|tiniest)\b"
+    r"(?!\s+(?:city|cities|country|countries|market|coverage|area covered))\b",
+    re.I,
+)
 _COMPARE_CUE = re.compile(r"\b(compare|versus|vs\.?|difference between)\b", re.I)
+# Strong named-project anchors that should win over city/type listing dumps.
+# Do NOT match bare source brands ("Wasalt apartments") — those are browse queries.
+_NAMED_PROJECT_HINT = re.compile(
+    r"\b("
+    r"trump\s+tower|neptune|missoni|astera|ayla(?:\s+oaks)?|ora\b|sidr|"
+    r"elenia|da[vr]inci|mouawad|urban\s+canyon|maliha|"
+    r"muscat\s+bay|jeddah\s+tower"
+    r")\b",
+    re.I,
+)
 
 
 async def retrieve(
@@ -179,8 +205,13 @@ async def retrieve(
 
     # Client-supplied context is advisory: a malformed `filters` object must not
     # break the turn — only keys that validate against the allow-listed schema
-    # are kept, everything else is dropped.
-    base_filter = _safe_context_filter(context_filters)
+    # are kept, everything else is dropped. Drop sticky filters on new factual /
+    # named-project turns even if the client still sent them.
+    base_filter = (
+        _safe_context_filter(context_filters)
+        if should_carry_filters(user_text)
+        else PropertyFilter()
+    )
     turn_filter = extract_filter(user_text, known_cities=await _known_cities())
     merged = merge_filters(base_filter, turn_filter)
 
@@ -193,6 +224,7 @@ async def retrieve(
     for i in ordinal_ids:
         if i not in selected_ids:
             selected_ids.append(i)
+    selected_ids = selected_ids[:3]
 
     result = RetrievalResult(
         applied_filters=merged.model_dump(exclude_none=True, exclude_defaults=True),
@@ -209,23 +241,37 @@ async def retrieve(
         for k, v in merged.model_dump().items()
         if k not in _weak
     )
-    ranked = merged.sort != "relevance"
-    # Resolve named projects first so "Trump Tower Jeddah" is not expanded into
-    # a city-wide Jeddah listing dump (city is inside the project name). Skip
-    # title matching on browse/filter questions — otherwise "Riyadh" alone
-    # wrongly pins a DarGlobal project and hides Wasalt listings.
-    listing_cue = bool(_LISTING_CUE.search(user_text))
+    ranked = merged.sort != "relevance" and bool(
+        _AREA_RANK_CUE.search(user_text)
+        or re.search(
+            r"\b(cheapest|most expensive|newest|latest|sort|order by|lowest[- ]?priced|"
+            r"highest[- ]?priced|priciest)\b",
+            user_text,
+            re.I,
+        )
+    )
+    # Always try title match when a project-like name is present, even if the
+    # utterance also says "apartments" / "villas". Skip title match only on
+    # pure browse queries with no project hint.
+    listing_cue = bool(_LISTING_CUE.search(user_text) or (
+        merged.sort != "relevance" and _AREA_RANK_CUE.search(user_text)
+    ))
     compare_cue = bool(_COMPARE_CUE.search(user_text))
+    project_hint = bool(_NAMED_PROJECT_HINT.search(user_text))
     named: list[Property] = []
-    if compare_cue or not listing_cue:
+    if compare_cue or project_hint or not listing_cue:
         named = await repo.find_properties_by_title(user_text, limit=4)
+    # On pure browse ("show apartments in Riyadh") skip title pinning so a
+    # city name inside a DarGlobal title cannot hide Wasalt listings.
     named_ids = {p.id for p in named}
 
-    # Listing intent = explicit browse/filter language, or structured filters
-    # without a named project. Ranked queries always list.
+    # Listing intent: ranked queries, or structured browse without a confident
+    # named-project hit. "amenities at Trump Tower" must not dump Jeddah listings.
     wants_listings = ranked or (
-        strong_structured and (listing_cue or not named_ids)
-    ) or (listing_cue and strong_structured)
+        strong_structured and not (named_ids and project_hint)
+    ) or (
+        listing_cue and strong_structured and not named_ids
+    )
 
     # A query scoped to a place we have nothing for ("apartments in Cairo") must
     # abstain, not fall back to showing unrelated records from other cities.
@@ -296,6 +342,11 @@ async def retrieve(
         ]
         result.properties = ordered[:4]
         result.cards = result.properties[:]
+        # City often appears only because it's inside a project title.
+        for k in ("city", "district", "country"):
+            val = result.applied_filters.get(k)
+            if val and any(str(val).lower() in (p.title or "").lower() for p in named):
+                result.applied_filters.pop(k, None)
     elif selected_ids and not named:
         # "these" / tray focus without a new named project.
         picked = [p for p in properties if p.id in selected_set][:3]
@@ -306,9 +357,9 @@ async def retrieve(
         # (+ optional second for disambiguation), no card flood.
         result.properties = named[:2]
         result.cards = named[:1]
-        # City/district often come from the project title ("… Jeddah"); do not
-        # stick them into conversation filters for the next turn.
-        for k in ("city", "district", "country"):
+        # City/district/type often come from the project title or "apartments at
+        # X"; do not stick them into conversation filters for the next turn.
+        for k in ("city", "district", "country", "property_type"):
             result.applied_filters.pop(k, None)
     elif 0 < len(properties) <= 3:
         result.properties = properties[:3]

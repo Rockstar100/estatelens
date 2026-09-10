@@ -161,6 +161,10 @@ class LLMClient:
                         return
                     except LLMError as exc:
                         last_error = exc
+                        # Already streamed visible tokens — do not concatenate a
+                        # second provider's answer into the same turn.
+                        if emitted_text:
+                            raise
                         log.warning(
                             "llm attempt failed",
                             extra={

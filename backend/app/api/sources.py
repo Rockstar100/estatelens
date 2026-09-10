@@ -82,19 +82,35 @@ async def sources() -> SourcesResponse:
             gaps.append(f"{r['source']}: no city could be normalized for any record.")
 
     primary = settings.active_llm_label
+    pref = (settings.llm_provider or "auto").strip().lower()
     chain: list[str] = []
-    if settings.groq_api_key:
-        chain.append(f"groq/{settings.groq_model}")
-    if settings.gemini_api_key:
-        chain.append(f"gemini/{settings.gemini_model}")
-    if settings.openrouter_api_key:
-        chain.append(settings.openrouter_model)
-        if (
-            settings.openrouter_fallback_model
-            and settings.openrouter_fallback_model != settings.openrouter_model
-        ):
-            chain.append(f"openrouter/{settings.openrouter_fallback_model}")
-    # Fallbacks = everyone after the primary in the auto chain (exclude dupes).
+    if pref in {"groq", "gemini", "openrouter"}:
+        # Pinned provider — only show that provider's model ladder.
+        if pref == "groq" and settings.groq_api_key:
+            chain.append(f"groq/{settings.groq_model}")
+        elif pref == "gemini" and settings.gemini_api_key:
+            chain.append(f"gemini/{settings.gemini_model}")
+        elif pref == "openrouter" and settings.openrouter_api_key:
+            chain.append(settings.openrouter_model)
+            if (
+                settings.openrouter_fallback_model
+                and settings.openrouter_fallback_model != settings.openrouter_model
+            ):
+                chain.append(f"openrouter/{settings.openrouter_fallback_model}")
+    else:
+        # auto: Groq → Gemini → OpenRouter (matches LLMClient._providers).
+        if settings.groq_api_key:
+            chain.append(f"groq/{settings.groq_model}")
+        if settings.gemini_api_key:
+            chain.append(f"gemini/{settings.gemini_model}")
+        if settings.openrouter_api_key:
+            chain.append(settings.openrouter_model)
+            if (
+                settings.openrouter_fallback_model
+                and settings.openrouter_fallback_model != settings.openrouter_model
+            ):
+                chain.append(f"openrouter/{settings.openrouter_fallback_model}")
+    # Fallbacks = everyone in the real chain after the primary (exclude dupes).
     seen: set[str] = {primary}
     fallback_bits: list[str] = []
     for label in chain:

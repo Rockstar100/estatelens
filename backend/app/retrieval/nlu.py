@@ -90,21 +90,23 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
     if asking_tx:
         pass
     elif re.search(
-        r"\b(for rent|to rent|rent(?:al|als|ed|ing)?|leas(?:e|ing)|to let|for hire)\b",
+        r"\b(for rent|to rent|rentals?|renting|leas(?:e|ing)|to let|for hire)\b",
         lowered,
     ):
         data["transaction_type"] = TransactionType.RENT
     elif re.search(
         r"\b(for[- ]sale|to buy|buy(?:ing)?|purchas(?:e|ing)|on sale|to own|"
-        r"sale listing|sales? listings?|resale|sale)\b",
+        r"sale listing|sales? listings?|resale)\b",
         lowered,
     ):
         data["transaction_type"] = TransactionType.SALE
+    # Bare "sale" / "rented" alone are too ambiguous ("sale price", "who rented").
 
     # --- record type ---------------------------------------------
     if re.search(r"\b(project|development|master community|off[- ]plan)\b", lowered):
         data["record_type"] = RecordType.DEVELOPMENT
-    elif re.search(r"\b(listing|unit|specific (?:flat|apartment|villa))\b", lowered):
+    elif re.search(r"\b(listings?|specific (?:flat|apartment|villa))\b", lowered):
+        # Bare "unit" is too common in development copy ("unit mix").
         data["record_type"] = RecordType.LISTING
 
     # --- bedrooms ---------------------------------------------
@@ -175,7 +177,10 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
         data["sort"] = "newest"
     elif re.search(r"\b(sort|order)(ed)? by (lowest |ascending )?price\b", lowered):
         data["sort"] = "price_asc"
-    elif re.search(r"\b(largest|biggest|most spacious|widest|greatest area|by (?:size|area))\b", lowered):
+    elif re.search(
+        r"\b(largest|biggest|most spacious|widest|greatest area|by (?:size|area))\b",
+        lowered,
+    ) and not re.search(r"\b(city|cities|country|countries|market|coverage)\b", lowered):
         data["sort"] = "area_desc"
     elif re.search(r"\b(smallest|most compact|tiniest|least (?:area|space))\b", lowered):
         data["sort"] = "area_asc"
@@ -198,7 +203,11 @@ def resolve_ordinal_reference(text: str, ordered_ids: list[str]) -> list[str]:
             lowered,
         ):
             continue
-        if re.search(rf"\b{re.escape(word)}\s+(?:bedroom|bath|time|week|month|year|day)\b", lowered):
+        if re.search(
+            rf"\b{re.escape(word)}\s+(?:bedroom|bath|time|week|month|year|day|"
+            rf"floor|storey|story|level|half|quarter|prize|place)\b",
+            lowered,
+        ):
             continue
         try:
             picked.append(ordered_ids[idx])
@@ -231,11 +240,29 @@ def should_carry_filters(user_text: str) -> bool:
         return False
     if re.search(r"\b(compare|versus|vs\.?)\b", low):
         return False
-    # Named-project factual questions should not keep a prior city/source lock.
+    # Refine phrases keep prior filters ("what about 3 bedrooms").
     if re.search(
-        r"\b(what|when|where|who|how)\b.+\b(handover|price|cost|located|location|"
-        r"designer|interiors?|developer|completion)\b",
+        r"\b(what about|how about|only|just|those|these|them|same|still|"
+        r"narrow|filter|also show|instead)\b",
         low,
-    ) and not re.search(r"\b(what about|only|just|those|these|them|same|still)\b", low):
+    ) and not re.search(
+        r"\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia)\b",
+        low,
+    ):
+        return True
+    # Named-project / factual questions should not keep a prior city/source lock.
+    if re.search(
+        r"\b(what|when|where|who|how|tell me|describe)\b",
+        low,
+    ) and re.search(
+        r"\b(handover|price|cost|located|location|designer|interiors?|"
+        r"developer|completion|amenities|tower|project|development)\b",
+        low,
+    ):
+        return False
+    if re.search(
+        r"\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia)\b",
+        low,
+    ):
         return False
     return True

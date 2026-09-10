@@ -27,13 +27,22 @@ function shouldCarryFilters(text: string): boolean {
   if (/\b(start over|reset|clear filters?|show (?:me )?all|never ?mind)\b/.test(low)) return false;
   if (/\b(compare|versus|vs\.?)\b/.test(low)) return false;
   if (
-    /\b(what|when|where|who|how)\b.+\b(handover|price|cost|located|location|designer|interiors?|developer|completion)\b/.test(
+    /\b(what about|how about|only|just|those|these|them|same|still|narrow|filter|also show|instead)\b/.test(
       low,
     ) &&
-    !/\b(what about|only|just|those|these|them|same|still)\b/.test(low)
+    !/\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia)\b/.test(low)
+  ) {
+    return true;
+  }
+  if (
+    /\b(what|when|where|who|how|tell me|describe)\b/.test(low) &&
+    /\b(handover|price|cost|located|location|designer|interiors?|developer|completion|amenities|tower|project|development)\b/.test(
+      low,
+    )
   ) {
     return false;
   }
+  if (/\b(trump\s+tower|neptune|missoni|astera|ayla|ora|sidr|elenia)\b/.test(low)) return false;
   return true;
 }
 
@@ -46,6 +55,7 @@ export function ChatPage() {
     updateLastAssistant,
     renameFromFirstMessage,
     takePendingPrompt,
+    popLastTurn,
   } = useChat();
   const compare = useCompare();
   const drawer = useSourceDrawer();
@@ -172,6 +182,7 @@ export function ChatPage() {
       newConversation,
       renameFromFirstMessage,
       updateLastAssistant,
+      popLastTurn,
     ],
   );
 
@@ -191,9 +202,9 @@ export function ChatPage() {
   };
 
   const retryLast = () => {
-    if (!conv) return;
-    const lastUser = [...conv.messages].reverse().find((m) => m.role === "user");
-    if (lastUser) send(lastUser.content);
+    if (!conv || streaming) return;
+    const text = popLastTurn(conv.id);
+    if (text) send(text);
   };
 
   const askAbout = (p: Property) => {

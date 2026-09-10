@@ -14,6 +14,8 @@ interface ChatState {
   clearAll: () => void;
   appendMessage: (id: string, msg: ChatMessage) => void;
   updateLastAssistant: (id: string, patch: Partial<ChatMessage>) => void;
+  /** Drop the trailing user + assistant pair (used by Retry). */
+  popLastTurn: (id: string) => string | null;
   renameFromFirstMessage: (id: string) => void;
   /** Queue a prompt and start a fresh conversation for it. */
   askInChat: (prompt: string) => void;
@@ -65,6 +67,23 @@ export const useChat = create<ChatState>()(
             return { ...c, messages: msgs, updatedAt: Date.now() };
           }),
         })),
+      popLastTurn: (id) => {
+        const conv = get().conversations.find((c) => c.id === id);
+        if (!conv) return null;
+        const msgs = [...conv.messages];
+        if (msgs.length && msgs[msgs.length - 1]?.role === "assistant") msgs.pop();
+        let userText: string | null = null;
+        if (msgs.length && msgs[msgs.length - 1]?.role === "user") {
+          userText = msgs[msgs.length - 1].content;
+          msgs.pop();
+        }
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === id ? { ...c, messages: msgs, updatedAt: Date.now() } : c,
+          ),
+        }));
+        return userText;
+      },
       renameFromFirstMessage: (id) =>
         set((s) => ({
           conversations: s.conversations.map((c) => {
