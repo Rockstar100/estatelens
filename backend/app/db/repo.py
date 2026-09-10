@@ -36,11 +36,15 @@ def _utcnow() -> datetime:
 
 
 async def upsert_document(document: Document) -> tuple[Document, bool]:
-    """Upsert by (source, canonical_url). Returns (stored, content_changed)."""
+    """Upsert by (source, canonical_url). Returns (stored, content_changed).
+
+    Does not re-read after write — on Atlas, a follow-up ``find_one`` can briefly
+    return ``None`` under concurrent crawlers / replica lag and crash the run.
+    """
     db = get_db()
+    source = document.source.value if hasattr(document.source, "value") else document.source
     existing = await db.documents.find_one(
-        {"source": document.source.value if hasattr(document.source, "value") else document.source,
-         "canonical_url": document.canonical_url}
+        {"source": source, "canonical_url": document.canonical_url}
     )
     changed = existing is None or existing.get("content_hash") != document.content_hash
     doc = document_to_doc(document)
@@ -48,8 +52,10 @@ async def upsert_document(document: Document) -> tuple[Document, bool]:
         doc["_id"] = existing["_id"]
         doc["id"] = existing["_id"]
     await db.documents.replace_one({"_id": doc["_id"]}, doc, upsert=True)
-    stored = await db.documents.find_one({"_id": doc["_id"]})
-    return doc_to_document(stored), changed
+    stored_id = str(doc["_id"])
+    if document.id == stored_id:
+        return document, changed
+    return document.model_copy(update={"id": stored_id}), changed
 
 
 async def replace_passages_for_document(document_id: str, passages: list[Passage]) -> int:

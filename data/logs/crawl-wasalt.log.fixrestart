@@ -1,0 +1,4 @@
+──────────────────────────────────── wasalt ────────────────────────────────────
+{"time": "2026-09-10 17:51:13,880", "level": "INFO", "logger": "estatelens.ingest", "message": "crawl start", "source": "wasalt", "targets": 54715}
+{"time": "2026-09-10 17:51:14,498", "level": "INFO", "logger": "estatelens.ingest", "message": "wasalt api batch", "batch": 1, "size": 200, "done": 0, "total_pdps": 48441}
+{"time": "2026-09-10 17:51:30,593", "level": "INFO", "logger": "estatelens.ingest", "message": "wasalt api batch", "batch": 2, "size": 200, "done": 131, "total_pdps": 48441}

@@ -88,6 +88,7 @@ async def run_crawl(
         await robots.aclose()
 
     extracted: list[ExtractedPage] = []
+    persist_lock = asyncio.Lock()
 
     # Snapshot is opened up front and appended per page (flushed), so a crash or
     # kill mid-run still leaves a usable, replayable artifact.
@@ -100,17 +101,18 @@ async def run_crawl(
         snap = snapshot_path.open("w", encoding="utf-8")
 
     async def _persist_and_record(page_result: ExtractedPage) -> None:
-        extracted.append(page_result)
-        if snap:
-            _write_snapshot(snap, page_result)
-        if persist:
-            stored_doc, changed = await repo.upsert_document(page_result.document)
-            if changed:
-                for p in page_result.passages:
-                    p.document_id = stored_doc.id
-                await repo.replace_passages_for_document(stored_doc.id, page_result.passages)
-            for pr in page_result.properties:
-                await repo.upsert_property(pr)
+        async with persist_lock:
+            extracted.append(page_result)
+            if snap:
+                _write_snapshot(snap, page_result)
+            if persist:
+                stored_doc, changed = await repo.upsert_document(page_result.document)
+                if changed:
+                    for p in page_result.passages:
+                        p.document_id = stored_doc.id
+                    await repo.replace_passages_for_document(stored_doc.id, page_result.passages)
+                for pr in page_result.properties:
+                    await repo.upsert_property(pr)
 
     # --- Wasalt property detail pages: use the site's own public JSON API ----
     if source is Source.WASALT:
@@ -118,31 +120,65 @@ async def run_crawl(
         allowed = [u for u in allowed if not wasalt.is_pdp(u)]
         if api_targets:
             headers = {"User-Agent": settings.scraper_user_agent}
-            async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
-                for url in api_targets:
-                    pid = wasalt.property_id_from_url(url)
-                    if not pid:
+            sem = asyncio.Semaphore(max(2, settings.scraper_max_concurrency * 4))
+            delay = max(0.05, settings.scraper_delay_seconds / 4)
+
+            async def _one_pdp(client: httpx.AsyncClient, url: str) -> None:
+                pid = wasalt.property_id_from_url(url)
+                if not pid:
+                    async with persist_lock:
                         run.skipped.append(SkippedPage(url=url, reason="no property id in url"))
-                        continue
+                    return
+                async with sem:
                     try:
                         data = await wasalt.fetch_api(client, pid)
                     except Exception as exc:  # noqa: BLE001
-                        run.failed.append(FailedPage(url=url, error=f"api: {exc}"[:300]))
-                        continue
+                        async with persist_lock:
+                            run.failed.append(FailedPage(url=url, error=f"api: {exc}"[:300]))
+                        return
                     if not data:
-                        run.skipped.append(
-                            SkippedPage(url=url, reason="listing expired / not available from API")
-                        )
-                        continue
+                        async with persist_lock:
+                            run.skipped.append(
+                                SkippedPage(url=url, reason="listing expired / not available from API")
+                            )
+                        return
                     try:
                         page_result = wasalt.build_from_api(url, data)
                         await wasalt.attach_listing_image(client, page_result)
+                        await _persist_and_record(page_result)
                     except Exception as exc:  # noqa: BLE001
-                        run.failed.append(FailedPage(url=url, error=f"build: {exc}"[:300]))
-                        continue
-                    await _persist_and_record(page_result)
-                    run.succeeded.append(url)
-                    await asyncio.sleep(settings.scraper_delay_seconds / 2)
+                        async with persist_lock:
+                            run.failed.append(FailedPage(url=url, error=f"build/persist: {exc}"[:300]))
+                        return
+                    async with persist_lock:
+                        run.succeeded.append(url)
+                    await asyncio.sleep(delay)
+
+            async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=30.0) as client:
+                # Chunk so progress is logged and memory stays bounded.
+                chunk = 200
+                for i in range(0, len(api_targets), chunk):
+                    batch = api_targets[i : i + chunk]
+                    log.info(
+                        "wasalt api batch",
+                        extra={
+                            "batch": i // chunk + 1,
+                            "size": len(batch),
+                            "done": len(run.succeeded),
+                            "total_pdps": len(api_targets),
+                        },
+                    )
+                    # return_exceptions: one bad page must not cancel the batch
+                    results = await asyncio.gather(
+                        *(_one_pdp(client, u) for u in batch),
+                        return_exceptions=True,
+                    )
+                    for url, res in zip(batch, results, strict=False):
+                        if isinstance(res, Exception):
+                            async with persist_lock:
+                                run.failed.append(
+                                    FailedPage(url=url, error=f"unhandled: {res}"[:300])
+                                )
 
     if allowed:
         # Browser rendering (Incapsula-fronted pages) is the slow, fragile part.

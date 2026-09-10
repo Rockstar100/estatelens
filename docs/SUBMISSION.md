@@ -38,25 +38,34 @@ search runs in-process over the small corpus; with no vectors or no
 
 ## 3. Source coverage & collection dates
 
-From `python -m scripts.cli coverage`, DarGlobal re-collected **2026-09-10**,
-Wasalt **2026-09-09**:
+From `python -m scripts.cli coverage`, collected **2026-09-10** (expanded crawl):
 
-| Source | Documents | Properties (listing / development) | Cities represented |
-|---|---|---|---|
-| DarGlobal | 23 | 22 (0 / 22) | Dubai, Jeddah, Riyadh, Doha, London, Muscat, Ras Al Khaimah, Benahavís, Costa del Sol |
-| Wasalt | 17 | 13 (13 / 0) | Riyadh, Jeddah, Madinah, Khobar, Dammam, Al Jumum–Bahra, Khamis Mushait |
-| **Total** | **40 documents · 35 properties · 228 retrievable passages** | | |
+| Source | Documents | Properties (listing / development) | With photo | Cities represented |
+|---|---|---|---|---|
+| DarGlobal | 36 | 26 (0 / 26) | 26 / 26 | Dubai, Jeddah, Riyadh, Doha, London, Muscat, Ras Al Khaimah, Benahavís, Costa del Sol |
+| Wasalt | 508 | 456 (456 / 0) | 428 / 456 | Riyadh, Jeddah, Dammam, Khobar, Makkah, Madinah, Taif, Abha, Buraydah, Tabuk, Jazan, Jubail, Diriyah, Khamis Mushait, Al Muzahimiyah, Al Jumum, Abu Arish, Thawl, Muhayil |
+| **Total** | **544 documents · 482 properties · ~805 retrievable passages** | | | |
 
-DarGlobal records are branded *developments* (The Astera, Marea, Tierra Viva,
-Neptune, Les Vagues, Da Vinci Tower, Urban Oasis, W Residences, Sea La Vie, The
-Mulliner, Trump Tower Jeddah, the AIDA Oman collection, Marriott Residences Aida,
-etc.); **20 of 22 now carry a real project photo** (the other two stayed behind
-the Incapsula challenge on every render attempt and keep their prior image-less
-record). Wasalt records are individual *listings* (apartments, villas and land
-for sale or rent). Country/city are resolved from the page's own "Location"
-key-fact and title first, so a project is never mislabelled to London by the
-DarGlobal HQ address in the page footer. Coverage is a point-in-time snapshot,
-not live inventory, and not a claim of completeness.
+DarGlobal records are branded *developments* (Trump Tower Jeddah, Neptune, The
+Astera, Marea, Tierra Viva, Da Vinci Tower, Urban Oasis, W Residences, Les
+Vagues, Sea La Vie, The Mulliner, the AIDA Oman collection, Marriott Residences
+Aida, Trump Maldives, etc.) — **all 26 carry a real project photo**. Wasalt
+records are individual *listings* (apartments, villas, floors and land for sale
+or rent) strided across the full ~48k-URL product sitemap. Wasalt city names come
+back from the API as raw transliterations and are canonicalised on ingest
+(`Aldammam`→Dammam, `Makkah Al Mukarramah`→Makkah, `Bariduh`→Buraydah, …).
+Country/city for DarGlobal are resolved from the page's own "Location" key-fact
+and title first, so a project is never mislabelled to London by the HQ address in
+the footer. Coverage is a point-in-time snapshot, not live inventory.
+
+**Not a full mirror.** The two sites hold ~468 (DarGlobal) and ~54,700 (Wasalt)
+URLs; a literal full crawl is infeasible for a demo (13+ h for Wasalt alone, and
+it would exceed the Atlas M0 512 MB tier and the free embedding quota). The set
+above is the largest practical sample: essentially every DarGlobal *development*
+(2 — `d-villas-at-jge`, `trump-international-resort-maldives` — stay behind the
+Incapsula challenge), and ~460 Wasalt listings across 19 cities. DarGlobal
+blog/press/insights articles are intentionally out of scope (editorial, not
+property data).
 
 ### Known collection limits
 - Both sites use anti-bot challenges (Incapsula / Cloudflare). Individual pages
@@ -212,8 +221,10 @@ CORS preflight from an unknown origin → rejected.
 
 - Retrieval blends keyword + structured filtering with semantic cosine over
   passage vectors. Semantic recall depends on the `embed` CLI having run and on
-  `GEMINI_API_KEY`; the free embeddings tier rate-limits, so a full re-embed of
-  the ~230 passages takes a few minutes of backoff (the command is resumable).
+  `GEMINI_API_KEY`; the free embeddings tier has a low daily cap. After the expanded crawl,
+  DarGlobal (266 passages) is fully vectorised but only ~25 of ~533 Wasalt
+  passages are — the rest embed on the next daily reset via the resumable
+  `embed` CLI. Lexical + structured retrieval covers every listing meanwhile.
 - The cosine search is in-process (fine for this corpus); no Atlas `$vectorSearch`
   index is used, so it does not depend on the M0 tier supporting one.
 - The rate limiter is in-memory (single instance); documented in the README.
@@ -269,7 +280,7 @@ of re-crawling: `python -m scripts.cli import-snapshot ../data/snapshots/full-20
    the Render URL once assigned.
 4. Atlas → Network Access → allow Render's egress (or `0.0.0.0/0` for the demo).
 5. Deploy. `healthCheckPath` is `/api/health`. The Atlas DB is already populated
-   (35 properties / 228 passages), so the app is usable immediately.
+   (482 properties / ~805 passages), so the app is usable immediately.
 
 ## 9. For the hiring team
 

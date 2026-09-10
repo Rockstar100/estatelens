@@ -176,17 +176,16 @@ _RAW_IMG_RE = re.compile(
 )
 
 
-def first_content_image(html: str) -> str | None:
-    """First plausible photo URL in raw HTML (handles escaped JSON payloads and
-    Next.js ``/_next/image?url=`` wrappers). Prefer known property CDNs."""
+def content_images(html: str, *, limit: int = 40) -> list[str]:
+    """Deduped gallery of plausible photo URLs from raw HTML / Next.js wrappers."""
     if not html:
-        return None
+        return []
     from urllib.parse import unquote
 
     text = html.replace("\\/", "/").replace("&#x2F;", "/").replace("&quot;", '"')
     candidates: list[str] = []
     for m in _RAW_IMG_RE.finditer(text):
-        url = m.group(0)
+        url = m.group(0).rstrip(".,);]")
         if "/_next/image" in url:
             continue
         if _looks_like_photo(url):
@@ -195,13 +194,29 @@ def first_content_image(html: str) -> str | None:
         real = unquote(m.group(1))
         if _looks_like_photo(real):
             candidates.append(real)
-    if not candidates:
-        return None
     preferred = [
         u for u in candidates
         if any(h in u.lower() for h in ("cdn.darglobal", "imagedelivery.net", "cloudinary"))
     ]
-    return (preferred or candidates)[0]
+    ordered = preferred + [u for u in candidates if u not in preferred]
+    seen: set[str] = set()
+    out: list[str] = []
+    for u in ordered:
+        key = u.split("?")[0].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(u)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def first_content_image(html: str) -> str | None:
+    """First plausible photo URL in raw HTML (handles escaped JSON payloads and
+    Next.js ``/_next/image?url=`` wrappers). Prefer known property CDNs."""
+    imgs = content_images(html, limit=1)
+    return imgs[0] if imgs else None
 
 
 def og_image_from_html(html: str) -> str | None:

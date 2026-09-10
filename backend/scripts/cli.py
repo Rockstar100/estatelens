@@ -50,15 +50,27 @@ def _run(coro):
 @app.command()
 def scrape(
     source: str = typer.Option("all", help="darglobal | wasalt | all"),
-    limit: int = typer.Option(60, help="max pages per source"),
+    limit: int = typer.Option(
+        60,
+        help="max pages per source; use 0 for full public sitemap (all pages)",
+    ),
     persist: bool = typer.Option(True, help="write to MongoDB"),
     snapshot: bool = typer.Option(True, help="write a JSONL snapshot"),
     max_render_seconds: float = typer.Option(
-        600.0, help="wall-clock ceiling for the browser-render phase per source"
+        600.0,
+        help="wall-clock ceiling for the browser-render phase per source "
+        "(use a large value, e.g. 86400, for full-site crawls)",
     ),
 ) -> None:
     """Crawl public pages, normalize, and (idempotently) store them."""
     sources = [Source.DARGLOBAL, Source.WASALT] if source == "all" else [Source(source)]
+    if limit <= 0 and max_render_seconds < 3600:
+        # Full sitemap needs a long browser budget (DarGlobal ~500 pages; Wasalt
+        # category/static pages after the API phase).
+        max_render_seconds = 86_400.0
+        console.print(
+            f"[yellow]limit=0 (full site): raising max_render_seconds to {max_render_seconds:.0f}s[/]"
+        )
 
     async def _go():
         for src in sources:

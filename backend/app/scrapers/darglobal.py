@@ -155,25 +155,23 @@ def _slug(url: str) -> str:
 
 
 async def discover(client: httpx.AsyncClient, limit: int = 80) -> list[str]:
+    """Return crawl targets. ``limit <= 0`` means the full public sitemap + curated."""
     resp = await client.get(SITEMAP_URL, timeout=30)
     resp.raise_for_status()
     locs = re.findall(r"<loc>([^<]+)</loc>", resp.text)
 
-    loc_set = {u.rstrip("/").lower() for u in locs}
-
-    known: list[str] = []
-    for slug in _KNOWN_DEVELOPMENTS:
-        cand = f"{BASE}/{slug}"
-        # accept whether or not it is in the sitemap (curated + verified to render)
-        if cand.lower() in loc_set or True:
-            known.append(cand)
+    known: list[str] = [f"{BASE}/{slug}" for slug in _KNOWN_DEVELOPMENTS]
 
     heuristic_devs: list[str] = []
     categories: list[str] = []
     informational: list[str] = []
+    other: list[str] = []
     for url in locs:
-        path = url[len(BASE):].strip("/") if url.startswith(BASE) else url
+        if not url.startswith(BASE):
+            continue
+        path = url[len(BASE):].strip("/")
         if not path:
+            other.append(url.rstrip("/") or BASE)
             continue
         segments = path.split("/")
         first = segments[0].lower()
@@ -183,14 +181,21 @@ async def discover(client: httpx.AsyncClient, limit: int = 80) -> list[str]:
             heuristic_devs.append(url)
         elif first in ("blog", "insights", "press") and len(segments) >= 2:
             informational.append(url)
+        elif first in _INFO_SLUGS or first in _NON_PROJECT_SLUGS:
+            informational.append(url)
+        else:
+            other.append(url)
 
     for slug in reversed(_INFO_SLUGS):
         informational.insert(0, f"{BASE}/{slug}")
 
-    ordered = known + categories[:6] + heuristic_devs + informational[: max(6, limit // 5)]
+    if limit <= 0:
+        ordered = known + heuristic_devs + categories + informational + other
+    else:
+        ordered = known + categories[:6] + heuristic_devs + informational[: max(6, limit // 5)]
     seen: set[str] = set()
     deduped = [u for u in ordered if not (u in seen or seen.add(u))]
-    return deduped[:limit]
+    return deduped if limit <= 0 else deduped[:limit]
 
 
 def _match_location(hay: str) -> tuple[str | None, str | None]:
@@ -293,6 +298,22 @@ def make_id_doc(url: str) -> str:
     return f"darglobal:doc:{slugify(path or 'home', 100)}"
 
 
+def _gallery_for_dev(soup, html: str) -> list[str]:
+    cover = H.og_image(soup, html)
+    rest = H.content_images(html, limit=40)
+    seen: set[str] = set()
+    out: list[str] = []
+    for u in ([cover] if cover else []) + rest:
+        if not u:
+            continue
+        key = u.split("?")[0].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(u)
+    return out
+
+
 def _build_development(
     url: str,
     final_url: str,
@@ -342,6 +363,7 @@ def _build_development(
     elif passages:
         description = passages[0].text[:1200]
 
+    gallery = _gallery_for_dev(soup, html)
     slug = _slug(url)
     prop_id = make_id(Source.DARGLOBAL.value, RecordType.DEVELOPMENT.value, slug)
     evidence = [
@@ -372,7 +394,8 @@ def _build_development(
         description=description,
         developer="DarGlobal",
         completion_or_handover_text=handover,
-        image_url=H.og_image(soup, html),
+        image_url=gallery[0] if gallery else None,
+        image_urls=gallery,
         source_url=final_url or url,
         scraped_at=now,
         content_hash=content_hash(cleaned),
