@@ -154,20 +154,6 @@ python -m scripts.cli embed
 
 ---
 
-## Demo questions
-
-Try these in Chat after data is loaded:
-
-- *What is the handover date for Trump Tower Jeddah and where is it?*
-- *Who designed the interiors of Neptune, and where is it?*
-- *What is the price of the 600 sqm land in Madinah?*
-- *Show Wasalt apartments for sale in Riyadh with at least 3 bedrooms.*
-- *Cheapest Wasalt sale listing?*
-- *Compare Trump Tower Jeddah and Neptune.*
-- *Show me apartments in Manama, Bahrain.* → should abstain (no data)
-
----
-
 ## Tests
 
 ```bash
@@ -202,7 +188,6 @@ docker run --rm -p 8000:8000 \
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, collections, security notes  
 - [docs/SUBMISSION.md](docs/SUBMISSION.md) — assignment checklist, coverage, test notes  
-- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — third-party licenses  
 
 ---
 
