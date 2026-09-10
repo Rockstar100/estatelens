@@ -71,9 +71,13 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
     data: dict = {}
 
     # --- source (tolerant of common misspellings) --------------------
-    if re.search(r"\bdar\s?global\b|\bdarglob\w*\b|\bdar\s?glob\w*\b", lowered):
+    _has_dg = bool(re.search(r"\bdar\s?global\b|\bdarglob\w*\b|\bdar\s?glob\w*\b", lowered))
+    _has_ws = bool(re.search(r"\bwas+a?l+a?t\b|\bwasl?at\b|\bwaslt\b|\bwasal\b", lowered))
+    # A compound "either a Wasalt … or a DarGlobal …" query names both — don't
+    # pin to one; let retrieval span both sources.
+    if _has_dg and not _has_ws:
         data["source"] = Source.DARGLOBAL
-    elif re.search(r"\bwas+a?l+a?t\b|\bwasl?at\b|\bwaslt\b|\bwasal\b", lowered):
+    elif _has_ws and not _has_dg:
         data["source"] = Source.WASALT
 
     # --- transaction type ------------------------------------------
@@ -235,7 +239,8 @@ NAMED_PROJECT_RE = (
     r"trump\s+tower|neptune|missoni|astera|ayla(?:\s+oaks)?|ora\b|sidr|"
     r"elenia|da[vr]inci|mouawad|urban\s+(?:canyon|oasis)|maliha|"
     r"muscat\s+bay|jeddah\s+tower|pagani|lamborghini|marriott|"
-    r"elie\s+saab|mulliner|tierra\s+viva|w\s+residences"
+    r"elie\s+saab|mulliner|tierra\s+viva|w\s+residences|"
+    r"marea|sea\s+la\s+vie|amour\s+sans|sunrise\s+haven|fairway\s+villas"
 )
 
 _THEME_LIFESTYLE_RE = (

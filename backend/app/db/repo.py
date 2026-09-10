@@ -155,6 +155,10 @@ _STOPWORDS = {
     "sea", "beach", "ocean", "coastal", "seafront", "interiors",
     "amenities", "amenity", "designer", "designers", "connected", "kind", "product",
     "type", "types", "island", "marjan",
+    # Too generic to pin a project alone
+    "tower", "towers", "hotel", "hotels", "international", "residence", "residences",
+    "next", "paper", "offerings", "offering", "same", "family", "differ", "similar",
+    "different", "pages", "page", "support", "actually", "put", "side",
 }
 
 
@@ -163,6 +167,12 @@ async def find_properties_by_title(text: str, *, limit: int = 3) -> list["Proper
     titles, so a question that names a project pulls that record. Case-insensitive
     substring on the longest non-stopword tokens; falls back to nothing."""
     import re as _re
+
+    # Short / multi-word titles that stopwording would otherwise destroy.
+    _PHRASE_TITLES = (
+        "sea la vie", "da vinci", "elie saab", "trump tower", "urban oasis",
+        "tierra viva", "amour sans", "les vagues", "the astera", "the mulliner",
+    )
 
     tokens = []
     for t in _re.findall(r"[A-Za-z][A-Za-z'\-]{2,}", text):
@@ -174,9 +184,23 @@ async def find_properties_by_title(text: str, *, limit: int = 3) -> list["Proper
         if t.lower() not in _STOPWORDS:
             tokens.append(t)
     tokens = sorted(set(tokens), key=len, reverse=True)[:6]
-    if not tokens:
-        return []
     db = get_db()
+    scored: dict[str, tuple[Property, int]] = {}
+
+    # Exact phrase boosts first (survives stopwording of "sea"/"la"/etc.).
+    low = text.lower()
+    for phrase in _PHRASE_TITLES:
+        if phrase not in low:
+            continue
+        cursor = db.properties.find(
+            {"title": {"$regex": _re.escape(phrase), "$options": "i"}}
+        ).limit(2)
+        async for d in cursor:
+            p = doc_to_property(d)
+            scored[p.id] = (p, max(scored.get(p.id, (p, 0))[1], 3))
+
+    if not tokens and not scored:
+        return []
 
     async def _search(toks: list[str], min_hits: int, cap: int) -> list[tuple[Property, int]]:
         if not toks:
@@ -219,34 +243,76 @@ async def find_properties_by_title(text: str, *, limit: int = 3) -> list["Proper
     # single names from the query that are not already covered (Neptune in a
     # compare), without pulling every loose "Trump …" sibling project.
     strong = [t for t in tokens if len(t) >= 5]
-    scored: dict[str, tuple[Property, int]] = {}
     multi_min = 2 if len(strong) >= 2 else 1
-    for prop, hits in await _search(tokens, min_hits=multi_min, cap=limit * 2):
-        scored[prop.id] = (prop, hits)
-    covered = " ".join((p.title or "").lower() for p, h in scored.values() if h >= multi_min)
-    for tok in strong:
-        if tok.lower() in covered:
-            continue
-        for prop, hits in await _search([tok], min_hits=1, cap=1):
+    if tokens:
+        for prop, hits in await _search(tokens, min_hits=multi_min, cap=limit * 2):
             prev = scored.get(prop.id)
-            if prev is None or hits > prev[1]:
-                scored[prop.id] = (prop, max(hits, prev[1] if prev else hits))
+            scored[prop.id] = (prop, max(hits, prev[1] if prev else hits))
+        covered = " ".join((p.title or "").lower() for p, h in scored.values() if h >= multi_min)
+        want_all = bool(
+            _re.search(r"\b(projects?|which|tied|related|all)\b", text, _re.I)
+        )
+        for tok in strong:
+            if tok.lower() in covered and not want_all:
+                continue
+            for prop, hits in await _search(
+                [tok], min_hits=1, cap=(limit if want_all else 1)
+            ):
+                prev = scored.get(prop.id)
+                if prev is None or hits > prev[1]:
+                    scored[prop.id] = (prop, max(hits, prev[1] if prev else hits))
+                elif want_all and prop.id not in scored:
+                    scored[prop.id] = (prop, hits)
 
     ranked = sorted(scored.values(), key=lambda x: (-x[1], x[0].title or ""))
     # One result per brand/family so "Trump Tower Jeddah" does not also keep
-    # "Trump International Dubai" when both matched "Trump"/"Tower".
+    # "Trump International Dubai" when both matched "Trump"/"Tower" — unless the
+    # question compares two cities / same-family offerings.
+    cities_in_q = _re.findall(
+        r"\b(jeddah|dubai|doha|riyadh|muscat|london|benahav[ií]s|oman|spain|"
+        r"ras\s+al\s+khaimah|marbella)\b",
+        text,
+        _re.I,
+    )
+    compare_same_brand = bool(
+        _re.search(r"\b(compare|versus|vs\.?|next to|against|between)\b", text, _re.I)
+        and len({c.lower() for c in cities_in_q}) >= 2
+    )
+    # "Which projects are tied to Missoni" should return every Missoni match.
+    list_all_brand = bool(
+        _re.search(r"\b(projects?|which|tied|related|all)\b", text, _re.I)
+        and _re.search(
+            r"\b(missoni|trump|pagani|mouawad|marriott|lamborghini|elie\s+saab)\b",
+            text,
+            _re.I,
+        )
+    )
     out: list[Property] = []
     seen_brand: set[str] = set()
-    for prop, _hits in ranked:
+    for prop, hits in ranked:
         title = (prop.title or "").lower()
         brand = next(
             (b for b in (
                 "trump", "neptune", "astera", "missoni", "mulliner", "pagani",
                 "lamborghini", "mouawad", "marriott", "wasalt", "elie saab",
+                "marea", "sea la vie", "da vinci",
             ) if b in title),
             title.split("|")[0].strip()[:24],
         )
-        if brand in seen_brand:
+        # Soft single-token matches are weak; skip unless no better hits yet.
+        if hits < 2 and out and not compare_same_brand and not list_all_brand:
+            continue
+        if brand in seen_brand and not compare_same_brand and not list_all_brand:
+            continue
+        if compare_same_brand and brand in seen_brand:
+            # Allow a second same-brand hit only when its city is also in the query
+            # and differs from the first.
+            prev = next(p for p in out if brand in (p.title or "").lower())
+            if (prop.city or "").lower() == (prev.city or "").lower():
+                continue
+            if prop.city and prop.city.lower() not in {c.lower() for c in cities_in_q}:
+                continue
+        if prop.id in {p.id for p in out}:
             continue
         seen_brand.add(brand)
         out.append(prop)

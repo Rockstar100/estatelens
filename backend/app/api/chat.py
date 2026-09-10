@@ -47,7 +47,12 @@ router = APIRouter(tags=["chat"])
 log = get_logger("estatelens.chat")
 
 # A citation token that may still be mid-stream at the end of a delta.
-_TRAILING_CITE = re.compile(r"[\[\(【]\s*E?\s*\d{0,3}\s*$")
+# Hold back the tail of a delta if it might be the start of a token that
+# normalize_citations rewrites once whole: a citation ("[E1]") *or* a fake
+# source marker the model sometimes emits ("[PROPERTY RECORD]", "(source)").
+_TRAILING_CITE = re.compile(
+    r"[\[\(【]\s*(?:E?\s*\d{0,3}|[A-Za-z][A-Za-z ]{0,15})\s*$"
+)
 
 
 def _sse(model) -> bytes:

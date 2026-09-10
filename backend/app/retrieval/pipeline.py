@@ -120,6 +120,12 @@ _NOT_A_PLACE = {
     "golf", "marina", "harbour", "harbor", "lake", "river", "pool",
     "view", "views", "downtown", "centre", "center", "city", "town",
     "sale", "rent", "budget", "price", "home", "homes", "house", "houses",
+    # Meta / answer-format words after "in …" ("in two short paragraphs")
+    "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "one", "first", "second", "third", "short", "long", "brief", "full",
+    "paragraph", "paragraphs", "sentence", "sentences", "bullet", "bullets",
+    "words", "lines", "detail", "details", "summary", "english", "plain",
+    "simple", "table", "list", "order", "section", "sections",
 }
 
 
@@ -132,7 +138,17 @@ def _unknown_location(user_text: str, known: set[str]) -> str | None:
     for m in _PLACE_IN_TEXT.finditer(user_text):
         place = m.group(1).strip()
         low = place.lower()
-        if low in _NOT_A_PLACE or low.split()[0] in _NOT_A_PLACE:
+        first = low.split()[0]
+        if first.isdigit() or low in _NOT_A_PLACE or first in _NOT_A_PLACE:
+            continue
+        # Answer-format phrases after "in …" ("in two short paragraphs").
+        if any(
+            w in low
+            for w in (
+                "paragraph", "sentence", "bullet", "summary", "detail",
+                "words", "lines",
+            )
+        ):
             continue
         if any(low == k or low in k or k in low for k in known):
             return None  # a real place is named — let the search run
@@ -186,7 +202,10 @@ _AREA_RANK_CUE = re.compile(
     r"(?!\s+(?:city|cities|country|countries|market|coverage|area covered))\b",
     re.I,
 )
-_COMPARE_CUE = re.compile(r"\b(compare|versus|vs\.?|difference between)\b", re.I)
+_COMPARE_CUE = re.compile(
+    r"\b(compare|versus|vs\.?|difference between|next to|side by side|against)\b",
+    re.I,
+)
 _NAMED_PROJECT_HINT = re.compile(rf"\b({NAMED_PROJECT_RE})\b", re.I)
 
 
@@ -405,8 +424,17 @@ async def retrieve(
     elif named:
         # Factual question about a named project — one best match for context
         # (+ optional second for disambiguation), no card flood.
-        result.properties = named[:2]
-        result.cards = named[:1]
+        # "Which projects are tied to Missoni" should surface every match.
+        list_brand = bool(
+            re.search(r"\b(projects?|which|tied|related)\b", user_text, re.I)
+            and len(named) > 1
+        )
+        if list_brand:
+            result.properties = named[:4]
+            result.cards = named[:4]
+        else:
+            result.properties = named[:2]
+            result.cards = named[:1]
         # City/district/type often come from the project title or "apartments at
         # X"; do not stick them into conversation filters for the next turn.
         for k in ("city", "district", "country", "property_type"):
