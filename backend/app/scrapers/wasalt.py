@@ -90,25 +90,32 @@ def _stride(seq: list[str], want: int) -> list[str]:
 
 
 async def discover(client: httpx.AsyncClient, limit: int = 60) -> list[str]:
+    """Return crawl targets. ``limit <= 0`` means the full product/category/static sitemaps."""
     product = await _fetch_sitemap_locs(client, CDN_SITEMAPS["product"])
     category = await _fetch_sitemap_locs(client, CDN_SITEMAPS["category"])
+    try:
+        static = await _fetch_sitemap_locs(client, CDN_SITEMAPS["static"])
+    except Exception:  # noqa: BLE001
+        static = []
 
     sale = [u for u in product if "/property/sale/" in u]
     rent = [u for u in product if "/property/rent/" in u]
+    cats = [u for u in category if "properties-for-sale-in" in u or "properties-for-rent-in" in u]
 
-    n_sale = max(8, int(limit * 0.6))
-    n_rent = max(4, int(limit * 0.22))
-    n_cat = max(3, int(limit * 0.1))
-
-    picked: list[str] = []
-    picked += HOME_AND_INFO
-    picked += _stride(sale, n_sale)
-    picked += _stride(rent, n_rent)
-    picked += _stride([u for u in category if "properties-for-sale-in" in u], n_cat)
+    if limit <= 0:
+        picked = list(HOME_AND_INFO) + static + sale + rent + category
+    else:
+        n_sale = max(8, int(limit * 0.6))
+        n_rent = max(4, int(limit * 0.22))
+        n_cat = max(3, int(limit * 0.1))
+        picked = list(HOME_AND_INFO)
+        picked += _stride(sale, n_sale)
+        picked += _stride(rent, n_rent)
+        picked += _stride(cats, n_cat)
 
     seen: set[str] = set()
     deduped = [u for u in picked if u.startswith(BASE) and not (u in seen or seen.add(u))]
-    return deduped[:limit]
+    return deduped if limit <= 0 else deduped[:limit]
 
 
 def is_pdp(url: str) -> bool:
@@ -148,40 +155,51 @@ async def fetch_api(client: httpx.AsyncClient, property_id: str) -> dict | None:
 _WASALT_IMAGE_HOST = "https://imagedelivery.net/1DNKFJPRaeUdy_j8F7HT3w"
 
 
-def _image_from_api_payload(data: dict) -> str | None:
-    """Build a card image URL from the DETAIL_PAGE_MOBILE payload.
+def _images_from_api_payload(data: dict) -> list[str]:
+    """All gallery URLs from DETAIL_PAGE_MOBILE (cover / facade first)."""
+    out: list[str] = []
+    seen: set[str] = set()
 
-    Gallery binary URLs are omitted from the JSON, but ``classificationData``
-    lists each photo's Cloudflare Images object name — the same ids the HTML
-    ``og:image`` tag uses.
-    """
+    def _add(url: str | None) -> None:
+        if not url or not isinstance(url, str) or not url.startswith("http"):
+            return
+        if "undefined" in url or "ad_qr" in url.lower():
+            return
+        key = url.split("?")[0].lower()
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(url)
+
     for img_key in ("coverImage", "image", "thumbnail", "mainImage", "defaultImage"):
         v = data.get(img_key)
-        if isinstance(v, str) and v.startswith("http"):
-            return v
-        if isinstance(v, dict):
+        if isinstance(v, str):
+            _add(v)
+        elif isinstance(v, dict):
             for nested in ("url", "src", "path", "imageUrl"):
                 nv = v.get(nested)
-                if isinstance(nv, str) and nv.startswith("http"):
-                    return nv
+                if isinstance(nv, str):
+                    _add(nv)
+
     for key in ("media", "images", "propertyImages", "photos", "gallery"):
         media = data.get(key)
-        if not isinstance(media, list) or not media:
+        if not isinstance(media, list):
             continue
-        first = media[0]
-        if isinstance(first, str) and first.startswith("http"):
-            return first
-        if isinstance(first, dict):
-            for nested in ("url", "src", "path", "imageUrl", "original", "large"):
-                nv = first.get(nested)
-                if isinstance(nv, str) and nv.startswith("http"):
-                    return nv
+        for item in media:
+            if isinstance(item, str):
+                _add(item)
+            elif isinstance(item, dict):
+                for nested in ("url", "src", "path", "imageUrl", "original", "large"):
+                    nv = item.get(nested)
+                    if isinstance(nv, str):
+                        _add(nv)
 
     pid = str(data.get("id") or "").strip()
     classified = data.get("classificationData") or []
-    if pid and isinstance(classified, list) and classified:
-        preferred = None
-        fallback = None
+    if pid and isinstance(classified, list):
+        facade: list[str] = []
+        other: list[str] = []
+        plans: list[str] = []
         for row in classified:
             if not isinstance(row, dict):
                 continue
@@ -193,24 +211,27 @@ def _image_from_api_payload(data: dict) -> str | None:
                 continue
             if not name.endswith((".webp", ".jpg", ".jpeg", ".png")):
                 continue
-            # Skip QR / advert assets Wasalt sometimes classifies as photos.
             low_name = name.lower()
             if any(bad in low_name for bad in ("ad_qr", "qr-code", "qr_code", "watermark", "logo")):
                 continue
             label = str(row.get("classificationName") or "").lower()
-            if preferred is None and label in {"facade", "exterior", "front", "building"}:
-                preferred = name
-            if fallback is None and label not in {"empty_room", "plan", "floor_plan", "map"}:
-                fallback = name
-            if preferred is None and fallback is None:
-                fallback = name
-        chosen = preferred or fallback
-        if chosen:
-            return (
+            if label in {"empty_room", "plan", "floor_plan", "map"}:
+                plans.append(name)
+            elif label in {"facade", "exterior", "front", "building"}:
+                facade.append(name)
+            else:
+                other.append(name)
+        for name in facade + other + plans:
+            _add(
                 f"{_WASALT_IMAGE_HOST}/production/properties/{pid}/images/"
-                f"{chosen}/quality=60,format=auto,width=800"
+                f"{name}/quality=60,format=auto,width=1200"
             )
-    return None
+    return out
+
+
+def _image_from_api_payload(data: dict) -> str | None:
+    imgs = _images_from_api_payload(data)
+    return imgs[0] if imgs else None
 
 
 async def fetch_listing_image(client: httpx.AsyncClient, url: str) -> str | None:
@@ -240,11 +261,16 @@ async def fetch_listing_image(client: httpx.AsyncClient, url: str) -> str | None
 
 
 async def attach_listing_image(client: httpx.AsyncClient, page: ExtractedPage) -> None:
+    """Fill cover from HTML only when the API gallery is empty."""
     for prop in page.properties:
-        # Prefer the HTML cover photo; fall back to whatever the JSON builder set.
+        if prop.image_urls:
+            if not prop.image_url:
+                prop.image_url = prop.image_urls[0]
+            continue
         html_img = await fetch_listing_image(client, prop.source_url)
         if html_img:
             prop.image_url = html_img
+            prop.image_urls = [html_img]
         elif prop.image_url and (
             "undefined" in prop.image_url or "ad_qr" in prop.image_url.lower()
         ):
@@ -279,6 +305,41 @@ def _attr(data: dict, key: str):
     return None
 
 
+# Wasalt's API returns raw transliterations for smaller cities; map them to the
+# names people actually type.
+_CITY_CANON = {
+    "aldammam": "Dammam",
+    "alttayif": "Taif",
+    "alttaif": "Taif",
+    "almuzahimih": "Al Muzahimiyah",
+    "almuzahimiyah": "Al Muzahimiyah",
+    "bariduh": "Buraydah",
+    "buraidah": "Buraydah",
+    "tbwk": "Tabuk",
+    "makkah al mukarramah": "Makkah",
+    "makkah al-mukarramah": "Makkah",
+    "al madinah al munawwarah": "Madinah",
+    "almadinah": "Madinah",
+    "alkhobar": "Khobar",
+    "al khobar": "Khobar",
+    "jazan": "Jazan",
+    "jizan": "Jazan",
+}
+
+
+def _canonical_city(city: str | None) -> str | None:
+    if not city:
+        return city
+    key = " ".join(city.split()).lower()
+    if key in _CITY_CANON:
+        return _CITY_CANON[key]
+    # "Abu Arish - 'Abu Earish" style — take the cleaner half.
+    if " - " in city:
+        left = city.split(" - ")[0].strip().strip("'").strip()
+        return _CITY_CANON.get(left.lower(), left or city)
+    return city
+
+
 def build_from_api(url: str, data: dict) -> ExtractedPage:
     now = datetime.now(timezone.utc)
     info = data.get("propertyInfo", {}) or {}
@@ -291,6 +352,7 @@ def build_from_api(url: str, data: dict) -> ExtractedPage:
         subtype = (info.get("propertySubTypeSlug") or "").strip().lower() or None
 
     city = info.get("city") if (info.get("city") or "").isascii() else None
+    city = _canonical_city(city)
     district = info.get("district") if (info.get("district") or "").isascii() else info.get("zone")
     district = district if (district or "").isascii() else None
     country = info.get("country") if (info.get("country") or "").isascii() else "Saudi Arabia"
@@ -322,20 +384,25 @@ def build_from_api(url: str, data: dict) -> ExtractedPage:
     area_value = _num(area_raw)
     area_unit = "sqm" if area_value is not None else None
 
-    # description: strip the Arabic HTML the API returns; keep a short EN summary
+    # description: strip HTML; keep full text (Arabic + English) for retrieval
     raw_desc = re.sub(r"<[^>]+>", " ", info.get("description") or "")
     raw_desc = " ".join(raw_desc.split())
-    description = raw_desc[:1200] if raw_desc and raw_desc.isascii() else None
+    description = raw_desc[:4000] if raw_desc else None
 
     amenities: list[str] = []
     for a in data.get("attributes", []) or []:
         name = a.get("name")
-        if isinstance(name, str) and name.isascii() and a.get("key") not in (
+        if isinstance(name, str) and a.get("key") not in (
             "noOfBedrooms", "noOfBathrooms", "builtUpArea", "carpetArea", "landArea",
         ):
             amenities.append(name.strip())
+    for a in data.get("additionalAttributes", []) or []:
+        name = a.get("name")
+        if isinstance(name, str) and name.strip() and name.strip() not in amenities:
+            amenities.append(name.strip())
 
-    image_url = _image_from_api_payload(data)
+    gallery = _images_from_api_payload(data)
+    image_url = gallery[0] if gallery else None
 
     doc_id = f"wasalt:doc:{slugify(url[len(BASE):].strip('/') or pid, 100)}"
     facts = [
@@ -414,11 +481,12 @@ def build_from_api(url: str, data: dict) -> ExtractedPage:
         area_value=area_value,
         area_unit=area_unit,
         original_area_text=(f"{area_raw} sqm" if area_raw else None),
-        amenities=amenities[:40],
+        amenities=amenities[:80],
         description=description,
         developer=info.get("projectName") or None,
         completion_or_handover_text=info.get("possessionType") if (info.get("possessionType") or "").isascii() else None,
         image_url=image_url,
+        image_urls=gallery,
         source_url=url,
         scraped_at=now,
         content_hash=content_hash(cleaned),

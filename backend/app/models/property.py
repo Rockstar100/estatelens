@@ -82,6 +82,8 @@ class Property(BaseModel):
     completion_or_handover_text: str | None = None
 
     image_url: str | None = None
+    # Full gallery when available (cover first). Cards still use ``image_url``.
+    image_urls: list[str] = Field(default_factory=list)
     source_url: str
     scraped_at: datetime
     content_hash: str
