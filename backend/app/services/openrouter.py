@@ -141,8 +141,16 @@ class LLMClient:
                 attempt = 0
                 while attempt <= max_retries:
                     try:
+                        emitted_text = False
                         async for chunk in self._stream_once(provider, model, messages):
+                            if chunk.text:
+                                emitted_text = True
                             yield chunk
+                        if not emitted_text:
+                            raise LLMError(
+                                "provider_unavailable",
+                                f"{provider.name}/{model} returned no visible content.",
+                            )
                         return
                     except LLMError as exc:
                         last_error = exc

@@ -127,7 +127,7 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
     money = re.search(
         r"(?:under|below|less than|up to|max(?:imum)?|budget of|around|about)\s*"
         r"(?:aed|sar|usd|gbp|eur|qar|sr|\$|£)?\s*"
-        r"([\d,]+(?:\.\d+)?)\s*(k|thousand|m|mn|million|b|bn|billion)?",
+        r"([\d,]+(?:\.\d+)?)\s*(k|thousand|m|mn|million|bn|billion)?\b",
         lowered,
     )
     if money:
@@ -137,13 +137,23 @@ def extract_filter(text: str, known_cities: list[str] | None = None) -> Property
     over = re.search(
         r"(?:over|above|more than|at least|from)\s*"
         r"(?:aed|sar|usd|gbp|eur|qar|sr|\$|£)?\s*"
-        r"([\d,]+(?:\.\d+)?)\s*(k|thousand|m|mn|million|b|bn|billion)?",
+        r"([\d,]+(?:\.\d+)?)\s*(k|thousand|m|mn|million|bn|billion)?\b",
         lowered,
     )
     if over:
-        amount = _parse_amount(over.group(1), over.group(2))
-        if amount and amount > 0:
-            data["budget_min"] = amount
+        # "at least 3 bedrooms" must not parse as "3 billion" via a bare "b".
+        # Only treat as money when a currency marker or magnitude suffix is present,
+        # or the number is clearly monetary (>= 1000 without a unit word after).
+        raw_n, suf = over.group(1), over.group(2)
+        after = lowered[over.end() : over.end() + 16]
+        if re.match(r"\s*(bed|br|bhk|bath|sq)", after):
+            pass
+        else:
+            amount = _parse_amount(raw_n, suf)
+            if amount and amount > 0:
+                # bare small integers without suffix/currency are bedroom-like, skip
+                if suf or amount >= 1000:
+                    data["budget_min"] = amount
 
     # --- city -----------------------------------------------
     for city in known_cities or []:

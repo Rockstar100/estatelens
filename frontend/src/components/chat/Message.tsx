@@ -83,7 +83,7 @@ export function MessageBubble({
               {msg.pending && <span className="caret" />}
             </div>
 
-            {msg.cards && msg.cards.length > 0 && (
+            {msg.cards && msg.cards.length > 0 && !msg.pending && (
               <div className="mt-3 grid gap-2.5">
                 {msg.cards.map((p) => (
                   <PropertyCard

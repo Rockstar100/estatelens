@@ -69,7 +69,14 @@ def test_nlu_area_superlatives():
     assert any("largest first" in n for n in notes)
 
 
-def test_nlu_sale_or_rent_question_does_not_lock_transaction():
+def test_nlu_at_least_bedrooms_not_billion_budget():
+    f = extract_filter(
+        "Show Wasalt apartments for sale in Riyadh with at least 3 bedrooms.",
+        known_cities=["Riyadh"],
+    )
+    assert f.bedrooms_min == 3
+    assert f.budget_min is None
+    assert f.city == "Riyadh"
     f = extract_filter("Is Trump Tower Jeddah listed for sale or for rent?")
     assert f.transaction_type is None
     f2 = extract_filter("sale or rent for this apartment?")

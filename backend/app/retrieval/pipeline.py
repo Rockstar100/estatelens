@@ -42,6 +42,8 @@ _SITE = {"darglobal": "DarGlobal", "wasalt": "Wasalt"}
 class RetrievalResult:
     evidence: list[EvidenceItem] = field(default_factory=list)
     properties: list[Property] = field(default_factory=list)
+    # UI property cards — narrower than ``properties`` (model context).
+    cards: list[Property] = field(default_factory=list)
     applied_filters: dict = field(default_factory=dict)
     filter_notes: list[str] = field(default_factory=list)
     selected_property_ids: list[str] = field(default_factory=list)
@@ -137,6 +139,15 @@ def _safe_context_filter(raw: object) -> PropertyFilter:
                 clean.pop(k, None)
 
 
+_LISTING_CUE = re.compile(
+    r"\b(show|list|find|search|browse|looking for|any|available|"
+    r"properties|listings|apartments|villas|units|results|under|over|"
+    r"cheapest|most expensive|largest|smallest)\b",
+    re.I,
+)
+_COMPARE_CUE = re.compile(r"\b(compare|versus|vs\.?|difference between)\b", re.I)
+
+
 async def retrieve(
     user_text: str,
     *,
@@ -180,7 +191,22 @@ async def retrieve(
         if k not in _weak
     )
     ranked = merged.sort != "relevance"
-    wants_listings = strong_structured or ranked
+    # Resolve named projects first so "Trump Tower Jeddah" is not expanded into
+    # a city-wide Jeddah listing dump (city is inside the project name). Skip
+    # title matching on browse/filter questions — otherwise "Riyadh" alone
+    # wrongly pins a DarGlobal project and hides Wasalt listings.
+    listing_cue = bool(_LISTING_CUE.search(user_text))
+    compare_cue = bool(_COMPARE_CUE.search(user_text))
+    named: list[Property] = []
+    if compare_cue or not listing_cue:
+        named = await repo.find_properties_by_title(user_text, limit=4)
+    named_ids = {p.id for p in named}
+
+    # Listing intent = explicit browse/filter language, or structured filters
+    # without a named project. Ranked queries always list.
+    wants_listings = ranked or (
+        strong_structured and (listing_cue or not named_ids)
+    ) or (listing_cue and strong_structured)
 
     # A query scoped to a place we have nothing for ("apartments in Cairo") must
     # abstain, not fall back to showing unrelated records from other cities.
@@ -192,6 +218,7 @@ async def retrieve(
         result.filter_notes = [f"no collected records in {bad_place}"]
         result.applied_filters = {}
         result.properties = []
+        result.cards = []
         result.evidence = []
         return result
 
@@ -202,17 +229,12 @@ async def retrieve(
     if selected_ids:
         properties = await repo.get_properties(selected_ids)
 
-    # Name matching is for "Trump Tower Jeddah"-style questions. Always try it —
-    # even alongside structured filters — so a named project is not dropped when
-    # the user also says "for sale" / "bedrooms" / etc. Prefer named hits first.
-    named = await repo.find_properties_by_title(user_text, limit=3)
-    named_ids = {p.id for p in named}
     for p in named:
         if p.id not in {x.id for x in properties}:
             properties.append(p)
 
     ranked_hits: list[Property] = []
-    if wants_listings or selected_ids or merged.text:
+    if wants_listings or selected_ids:
         page_items, _total = await repo.query_properties(
             mongo_filter, page=1, page_size=12, sort=sort_spec
         )
@@ -236,10 +258,25 @@ async def retrieve(
         rest = [p for p in properties if p.id != top.id]
         properties = [top] + rest
 
-    if selected_ids or named_ids or wants_listings or 0 < len(properties) <= 6:
+    # Model context: keep enough records to answer. UI cards: only for browse /
+    # compare / selection — not for every factual "where is X" turn.
+    if selected_ids or wants_listings or ranked:
         result.properties = properties[:6]
+        result.cards = result.properties[:]
+    elif compare_cue and named:
+        result.properties = properties[:4]
+        result.cards = result.properties[:]
+    elif named:
+        # Factual question about a named project — one best match for context
+        # (+ optional second for disambiguation), no card flood.
+        result.properties = named[:2]
+        result.cards = named[:1]
+    elif 0 < len(properties) <= 3:
+        result.properties = properties[:3]
+        result.cards = []
     else:
         result.properties = []
+        result.cards = []
 
     # --- passage keyword search --------------------------------------
     search_terms = merged.text or user_text

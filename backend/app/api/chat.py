@@ -96,8 +96,8 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
                 applied_filters=r.applied_filters,
             )
         )
-        if r.properties:
-            yield _sse(StreamCards(properties=r.properties))
+        if r.cards:
+            yield _sse(StreamCards(properties=r.cards))
 
         messages = build_messages(history, r.evidence, r.properties, r.filter_notes)
 
@@ -205,7 +205,7 @@ async def chat(req: ChatRequest, request: Request, rid: str = Depends(request_id
         yield _sse(
             StreamDone(
                 citations=cited_ids,
-                property_ids=[p.id for p in r.properties],
+                property_ids=[p.id for p in (r.cards or r.properties)],
                 model=used_model or default_model,
                 finish_reason=finish_reason,
                 usage=usage,

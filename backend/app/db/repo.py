@@ -210,20 +210,44 @@ async def find_properties_by_title(text: str, *, limit: int = 3) -> list["Proper
             out.append((doc_to_property(d), hits))
         return out
 
-    # Multi-token hits first (Trump + Tower + Jeddah), then strong single names
-    # (Neptune) so compare questions resolve every named project.
+    # Multi-token hits first (Trump + Tower + Jeddah). Then add other strong
+    # single names from the query that are not already covered (Neptune in a
+    # compare), without pulling every loose "Trump …" sibling project.
     strong = [t for t in tokens if len(t) >= 5]
     scored: dict[str, tuple[Property, int]] = {}
-    for prop, hits in await _search(tokens, min_hits=2 if len(strong) >= 2 else 1, cap=limit * 2):
+    multi_min = 2 if len(strong) >= 2 else 1
+    for prop, hits in await _search(tokens, min_hits=multi_min, cap=limit * 2):
         scored[prop.id] = (prop, hits)
+    covered = " ".join((p.title or "").lower() for p, h in scored.values() if h >= multi_min)
     for tok in strong:
-        for prop, hits in await _search([tok], min_hits=1, cap=2):
+        if tok.lower() in covered:
+            continue
+        for prop, hits in await _search([tok], min_hits=1, cap=1):
             prev = scored.get(prop.id)
             if prev is None or hits > prev[1]:
-                scored[prop.id] = (prop, max(hits, prev[1] if prev else 0))
+                scored[prop.id] = (prop, max(hits, prev[1] if prev else hits))
 
     ranked = sorted(scored.values(), key=lambda x: (-x[1], x[0].title or ""))
-    return [p for p, _ in ranked[:limit]]
+    # One result per brand/family so "Trump Tower Jeddah" does not also keep
+    # "Trump International Dubai" when both matched "Trump"/"Tower".
+    out: list[Property] = []
+    seen_brand: set[str] = set()
+    for prop, _hits in ranked:
+        title = (prop.title or "").lower()
+        brand = next(
+            (b for b in (
+                "trump", "neptune", "astera", "missoni", "mulliner", "pagani",
+                "lamborghini", "mouawad", "marriott", "wasalt", "elie saab",
+            ) if b in title),
+            title.split("|")[0].strip()[:24],
+        )
+        if brand in seen_brand:
+            continue
+        seen_brand.add(brand)
+        out.append(prop)
+        if len(out) >= limit:
+            break
+    return out
 
 
 async def query_properties(

@@ -43,8 +43,9 @@ class Settings(BaseSettings):
     openrouter_max_output_tokens: int = Field(default=1200, alias="OPENROUTER_MAX_OUTPUT_TOKENS")
 
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
-    # Groq's free catalogue rotates; openai/gpt-oss-120b is currently available.
-    groq_model: str = Field(default="openai/gpt-oss-120b", alias="GROQ_MODEL")
+    # Prefer a fast instruction-following free model; 120b often burns the
+    # token budget on hidden reasoning and returns an empty visible answer.
+    groq_model: str = Field(default="openai/gpt-oss-20b", alias="GROQ_MODEL")
     groq_base_url: str = Field(default="https://api.groq.com/openai/v1", alias="GROQ_BASE_URL")
 
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
