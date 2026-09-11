@@ -1,6 +1,12 @@
-# Local development stack. Production uses MongoDB Atlas, not this container.
+# Default: web app talks to MongoDB Atlas via MONGODB_URI in .env
+# (same cloud cluster the CLI uses).
+#
+# Optional leftover local Mongo (only if you explicitly want it):
+#   docker compose --profile local-mongo up -d mongo
+
 services:
   mongo:
+    profiles: ["local-mongo"]
     image: mongo:7
     restart: unless-stopped
     ports:
@@ -20,23 +26,12 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      MONGODB_URI: mongodb://mongo:27017
-      MONGODB_DATABASE: estatelens
-      APP_BASE_URL: http://localhost:8000
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8000}
       PORT: "8000"
-      LOG_LEVEL: INFO
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
-      OPENROUTER_FALLBACK_MODEL: ${OPENROUTER_FALLBACK_MODEL:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
-      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
-    depends_on:
-      mongo:
-        condition: service_healthy
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 volumes:
   estatelens_mongo:

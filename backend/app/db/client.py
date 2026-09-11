@@ -14,8 +14,17 @@ from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.config import Settings, get_settings
+from app.services.logging import get_logger
 
 _client: AsyncMongoClient | None = None
+_log = get_logger("estatelens.mongo")
+
+
+def mongo_host(uri: str | None = None) -> str:
+    """Hostname only (no user/password) so we can log which cluster is in use."""
+    raw = (uri or get_settings().mongodb_uri).strip()
+    tail = raw.split("@")[-1]
+    return tail.split("/")[0].split("?")[0] or "unknown"
 
 # Split a mongodb[+srv] URI into scheme, userinfo (greedy, up to the LAST '@'
 # before the host) and the host/params tail.
@@ -50,6 +59,10 @@ async def connect(settings: Settings | None = None) -> AsyncMongoClient:
             socketTimeoutMS=settings.mongodb_timeout_ms * 3,
             tz_aware=True,
             appname="estatelens",
+        )
+        _log.info(
+            "mongo client opened",
+            extra={"host": mongo_host(settings.mongodb_uri), "database": settings.mongodb_database},
         )
     return _client
 

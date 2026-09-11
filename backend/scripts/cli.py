@@ -292,14 +292,15 @@ def backfill_images(
 @app.command()
 def embed(
     rebuild: bool = typer.Option(False, help="re-embed every passage, not just missing/stale"),
-    batch: int = typer.Option(96, help="passages per embedding request"),
+    batch: int = typer.Option(12, help="passages per embedding request (keep small on free tier)"),
+    pause: float = typer.Option(2.0, help="seconds to sleep between successful batches"),
 ) -> None:
     """Build/refresh passage vectors for the semantic-retrieval layer and store
     them on each passage in MongoDB (`embedding`, `embedding_model`,
     `embedding_hash`). Uses GEMINI_API_KEY; no-op if it is unset."""
 
     async def _go():
-        from app.services.embeddings import embed_texts, embedding_hash
+        from app.services.embeddings import EmbedQuotaExhausted, embed_texts, embedding_hash
 
         s = get_settings()
         if not s.gemini_api_key:
@@ -320,12 +321,40 @@ def embed(
 
         console.print(f"[bold]{len(todo)} to embed[/], {skipped} already current  ({model}, {dims}d)")
         done = 0
+        failed_streak = 0
         for i in range(0, len(todo), batch):
             part = todo[i : i + batch]
-            vecs = await embed_texts([t for _, t in part], task_type="RETRIEVAL_DOCUMENT")
-            if not vecs:
-                console.print("[red]embedding request failed — stopping.")
+            try:
+                vecs = await embed_texts([t for _, t in part], task_type="RETRIEVAL_DOCUMENT")
+            except EmbedQuotaExhausted:
+                console.print(
+                    "[red]Gemini embedding quota exhausted[/] — "
+                    f"saved progress at {done}/{len(todo)}. Re-run later to resume."
+                )
                 break
+            if not vecs:
+                failed_streak += 1
+                console.print(
+                    f"[yellow]batch failed[/] ({failed_streak}) — "
+                    f"waiting 60s then retrying from offset {i}…"
+                )
+                if failed_streak >= 3:
+                    console.print(
+                        "[red]embedding stopped[/] after repeated failures. Re-run later to resume."
+                    )
+                    break
+                await asyncio.sleep(60.0)
+                try:
+                    vecs = await embed_texts([t for _, t in part], task_type="RETRIEVAL_DOCUMENT")
+                except EmbedQuotaExhausted:
+                    console.print(
+                        "[red]Gemini embedding quota exhausted[/] — "
+                        f"saved progress at {done}/{len(todo)}. Re-run later to resume."
+                    )
+                    break
+                if not vecs:
+                    continue
+            failed_streak = 0
             for (pid, text), vec in zip(part, vecs):
                 await db.passages.update_one(
                     {"_id": pid},
@@ -337,6 +366,8 @@ def embed(
                 )
             done += len(part)
             console.print(f"  embedded {done}/{len(todo)}")
+            if pause > 0 and i + batch < len(todo):
+                await asyncio.sleep(pause)
         indexed = await db.passages.count_documents(
             {"embedding": {"$type": "array"}, "embedding_model": model}
         )

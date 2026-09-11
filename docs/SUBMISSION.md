@@ -253,8 +253,8 @@ CORS preflight from an unknown origin → rejected.
 See [README → Run it locally](../README.md#run-it-locally). In short:
 
 ```bash
-cp .env.example .env            # add OPENROUTER_API_KEY
-docker compose up --build       # http://localhost:8000
+cp .env.example .env            # add Atlas MONGODB_URI + LLM keys
+docker compose up --build       # http://localhost:8000 (Atlas, no local Mongo)
 
 # ingestion (separate env; not in the web image)
 cd backend

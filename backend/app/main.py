@@ -37,7 +37,10 @@ async def lifespan(app: FastAPI):
     await db_client.connect(settings)
     try:
         await ensure_indexes()
-        log.info("startup: mongo connected, indexes ensured")
+        log.info(
+            "startup: mongo connected, indexes ensured",
+            extra={"host": db_client.mongo_host(), "database": settings.mongodb_database},
+        )
     except Exception as exc:  # noqa: BLE001
         log.warning("startup: index creation deferred", extra={"error": str(exc)})
     yield

@@ -67,25 +67,26 @@ git clone https://github.com/Rockstar100/estatelens.git
 cd estatelens
 cp .env.example .env
 # Edit .env — set GROQ_API_KEY and/or GEMINI_API_KEY and/or OPENROUTER_API_KEY
-# Set MONGODB_URI (Atlas or local compose mongo)
+# Set MONGODB_URI to your Atlas SRV string (the app uses this, not local Docker Mongo)
 ```
 
-### Docker (API + Mongo)
+### Docker (API → Atlas)
 
 ```bash
 docker compose up --build
-# → http://localhost:8000
+# → http://localhost:8000  (reads MONGODB_URI from .env)
 ```
 
-Pass LLM keys via your shell env or a Compose override; see `.env.example`.
+Local Mongo is **off** by default. Only start it if you explicitly want a disk copy:
+
+```bash
+docker compose --profile local-mongo up -d mongo
+```
 
 ### Dev (hot reload)
 
 ```bash
-# Terminal 1 — Mongo (or use Atlas)
-docker compose up mongo
-
-# Terminal 2 — API
+# Terminal 1 — API (uses Atlas from .env; no local Mongo required)
 cd backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate
@@ -93,7 +94,7 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8000
 
-# Terminal 3 — SPA (proxies /api → :8000)
+# Terminal 2 — SPA (proxies /api → :8000)
 cd frontend
 npm install
 npm run dev
