@@ -19,9 +19,20 @@ from app.services.logging import get_logger
 
 log = get_logger("estatelens.embeddings")
 
-# Google caps batchEmbedContents at 100 requests per call.
+# Google caps batchEmbedContents at 100 requests per call; free tier is much
+# tighter on QPM, so callers should prefer small batches (8–16).
 _BATCH = 100
-_TIMEOUT = 30.0
+_TIMEOUT = 45.0
+_MAX_RETRIES = 8
+
+
+class EmbedQuotaExhausted(RuntimeError):
+    """Gemini free-tier daily embedding quota is used up; retry later."""
+
+
+def _is_quota_exhausted(body: str) -> bool:
+    low = (body or "").lower()
+    return "exceeded your current quota" in low or "quota_exhausted" in low or "billing" in low
 
 
 def embedding_hash(text: str, model: str, dims: int) -> str:
@@ -72,12 +83,15 @@ async def embed_texts(
                 ]
             }
             resp = await client.post(url, params={"key": s.gemini_api_key}, json=payload)
-            # The free embeddings tier rate-limits aggressively; back off and retry
-            # a few times before giving up (and falling back to lexical).
             retries = 0
-            while resp.status_code == 429 and retries < 4:
-                wait = 5 * (retries + 1)
-                log.warning("embed rate-limited, backing off", extra={"wait_s": wait})
+            while resp.status_code == 429 and retries < _MAX_RETRIES:
+                body = resp.text[:400]
+                if _is_quota_exhausted(body):
+                    log.warning("embed daily quota exhausted", extra={"body": body[:200]})
+                    raise EmbedQuotaExhausted(body[:200])
+                # Exponential backoff with jitter ceiling — free tier often needs 30–60s.
+                wait = min(90.0, 5.0 * (2**retries))
+                log.warning("embed rate-limited, backing off", extra={"wait_s": wait, "try": retries + 1})
                 await asyncio.sleep(wait)
                 resp = await client.post(url, params={"key": s.gemini_api_key}, json=payload)
                 retries += 1
@@ -97,6 +111,9 @@ async def embed_texts(
                 if not vals:
                     return None
                 out.append(_normalise([float(x) for x in vals]))
+            # Gentle pacing between chunks so a large CLI run doesn't burn the QPM budget.
+            if i + _BATCH < len(texts):
+                await asyncio.sleep(1.0)
         return out
     except (httpx.HTTPError, ValueError) as exc:  # noqa: BLE001
         log.warning("embed error", extra={"error": str(exc)[:200]})

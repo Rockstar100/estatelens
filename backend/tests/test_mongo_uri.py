@@ -1,4 +1,4 @@
-from app.db.client import normalize_mongo_uri
+from app.db.client import mongo_host, normalize_mongo_uri
 
 
 def test_raw_at_in_password_is_encoded():
@@ -22,3 +22,9 @@ def test_already_encoded_is_left_alone():
 def test_userless_uri_untouched():
     uri = "mongodb://db1.example.com:27017,db2.example.com:27017/?replicaSet=rs0"
     assert normalize_mongo_uri(uri) == uri
+
+
+def test_mongo_host_strips_credentials():
+    assert mongo_host(
+        "mongodb+srv://Parveen:dbuser@123@estatelens.tcdgzk8.mongodb.net/?appName=EstateLens"
+    ) == "estatelens.tcdgzk8.mongodb.net"

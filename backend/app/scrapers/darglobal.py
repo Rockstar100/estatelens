@@ -190,7 +190,18 @@ async def discover(client: httpx.AsyncClient, limit: int = 80) -> list[str]:
         informational.insert(0, f"{BASE}/{slug}")
 
     if limit <= 0:
-        ordered = known + heuristic_devs + categories + informational + other
+        # Full crawl = developments + project categories + core info pages.
+        # Skip blog/press/insights: same Incapsula wall, almost never extractable
+        # without a long-lived warmed browser session, and not property data.
+        core_info: list[str] = []
+        for u in informational:
+            slug = _slug(u).lower()
+            path = u[len(BASE):].strip("/").lower() if u.startswith(BASE) else u.lower()
+            if slug in _INFO_SLUGS or path in _INFO_SLUGS:
+                core_info.append(u)
+            elif path.startswith("projects/"):
+                core_info.append(u)
+        ordered = known + heuristic_devs + categories + core_info
     else:
         ordered = known + categories[:6] + heuristic_devs + informational[: max(6, limit // 5)]
     seen: set[str] = set()

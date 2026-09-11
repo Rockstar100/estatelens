@@ -27,7 +27,8 @@ async def readiness(response: Response) -> ReadinessResponse:
 
     try:
         await db_client.ping()
-        checks.append(ReadinessCheck(name="mongodb", ok=True, detail="reachable"))
+        host = db_client.mongo_host()
+        checks.append(ReadinessCheck(name="mongodb", ok=True, detail=f"reachable ({host})"))
     except Exception as exc:  # noqa: BLE001
         checks.append(ReadinessCheck(name="mongodb", ok=False, detail=f"unreachable: {exc}"))
 

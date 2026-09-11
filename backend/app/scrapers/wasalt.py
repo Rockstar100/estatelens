@@ -370,9 +370,6 @@ def build_from_api(url: str, data: dict) -> ExtractedPage:
         # display-currency helper that is unreliable for sale listings (it can
         # carry a token value), so a missing sale price stays unknown.
         price = _num(info.get("salePrice"))
-        # Guard against an implausible token price on a real property.
-        if price is not None and price < 10_000:
-            price = None
         basis = PriceBasis.TOTAL if price is not None else PriceBasis.UNSPECIFIED
 
     bedrooms = _int(_attr(data, "noOfBedrooms"))
@@ -383,6 +380,53 @@ def build_from_api(url: str, data: dict) -> ExtractedPage:
     area_raw = _attr(data, "builtUpArea") or _attr(data, "carpetArea") or _attr(data, "landArea")
     area_value = _num(area_raw)
     area_unit = "sqm" if area_value is not None else None
+    # Wasalt sometimes reports the plot/building footprint in `builtUpArea` for a
+    # flat ("Apartment 2483 SQM"). Over ~1500 sqm it is not a unit area — drop it
+    # rather than let it distort a "largest apartment" query. Raw stays in
+    # original_area_text.
+    if (
+        area_value is not None
+        and area_value > Decimal(1500)
+        and (subtype in ("apartment", "studio", "flat") or "apartment" in url.lower())
+    ):
+        area_value = None
+        area_unit = None
+
+    # --- sale-price sanity ------------------------------------------------
+    # Wasalt's bulk catalogue carries broker data-entry errors: token prices
+    # ("SAR 42,000" for an 830 sqm flat) and mis-keyed figures. We never invent a
+    # value, but a price that is internally impossible is dropped (raw text kept
+    # in original_price_text) so it can't rank as "the cheapest".
+    if transaction == TransactionType.SALE and price is not None:
+        is_land = (subtype in ("land", "plot")) or "/land" in url.lower() or "land-" in url.lower()
+        min_total = Decimal(15_000) if is_land else Decimal(120_000)
+        if price < min_total:
+            price = None
+        elif (
+            not is_land
+            and area_value
+            and area_value > 0
+            and (price / area_value) < Decimal(200)  # SAR/sqm floor for a real sale
+        ):
+            price = None
+        if price is None:
+            basis = PriceBasis.UNSPECIFIED
+
+    # --- rent-price sanity --------------------------------------------
+    # Same broker data-entry problem on the rent side: "SAR 350/year" for an
+    # apartment, or "SAR 1,700/year" for a 730 sqm flat. A real Saudi rental
+    # floor is roughly SAR 5,000/year (well under any genuine studio).
+    if transaction == TransactionType.RENT and price is not None:
+        monthly = basis == PriceBasis.MONTHLY_RENT
+        min_rent = Decimal(500) if monthly else Decimal(5_000)
+        if price < min_rent:
+            price = None
+            basis = PriceBasis.UNSPECIFIED
+
+    # A property's own bedroom count over ~15 is a mis-keyed attribute (area or
+    # price landing in noOfBedrooms), not a real single unit.
+    if bedrooms is not None and bedrooms > 15:
+        bedrooms = None
 
     # description: strip HTML; keep full text (Arabic + English) for retrieval
     raw_desc = re.sub(r"<[^>]+>", " ", info.get("description") or "")
