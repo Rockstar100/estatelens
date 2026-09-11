@@ -78,14 +78,33 @@ export function SourcesPage() {
             },
             {
               t: "Deployed with a working URL",
-              d: "This app, served at a public host. Health: /api/health.",
+              d: "Health: /api/health",
+              href: "https://estatelens.onrender.com/",
+              hrefLabel: "estatelens.onrender.com",
             },
           ].map((row) => (
             <li key={row.t} className="flex gap-3">
               <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[var(--color-accent)]" />
               <div>
                 <p className="font-medium text-[var(--color-ink)]">{row.t}</p>
-                <p className="text-[var(--color-ink-soft)]">{row.d}</p>
+                <p className="text-[var(--color-ink-soft)]">
+                  {"href" in row && row.href ? (
+                    <>
+                      <a
+                        href={row.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[var(--color-accent)] hover:underline"
+                      >
+                        {row.hrefLabel}
+                      </a>
+                      {" — "}
+                      {row.d}
+                    </>
+                  ) : (
+                    row.d
+                  )}
+                </p>
               </div>
             </li>
           ))}
@@ -184,8 +203,17 @@ export function SourcesPage() {
           <code className="text-[13px]">documents</code> and{" "}
           <code className="text-[13px]">passages</code>. Chat answers are produced by a free LLM
           (Groq, Gemini, or OpenRouter — whichever keys are configured) constrained to the retrieved
-          passages, with citations resolved from stored records. This is an independent demo and is
-          not affiliated with DarGlobal or Wasalt.
+          passages, with citations resolved from stored records. The public instance runs on Render
+          at{" "}
+          <a
+            href="https://estatelens.onrender.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--color-accent)] hover:underline"
+          >
+            estatelens.onrender.com
+          </a>
+          . This is an independent demo and is not affiliated with DarGlobal or Wasalt.
         </p>
       </Card>
     </div>

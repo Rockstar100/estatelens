@@ -6,12 +6,10 @@ or Wasalt._
 ## 1. Public URL
 
 - **Repository:** https://github.com/Rockstar100/estatelens (public)
-- **App (review):** run locally or via Docker / Render — see root [README](../README.md).
-  A Cloudflare quick tunnel may be used for ephemeral review; prefer a Render
-  `*.onrender.com` service from `render.yaml` for a stable link.
-- **Health:** `GET /api/health` on the deployed host
-- **Persistent host:** `render.yaml` defines a Render free web service (Atlas +
-  Groq / Gemini / OpenRouter env vars). Set secrets in the dashboard (`sync: false`).
+- **App:** https://estatelens.onrender.com/
+- **Health:** https://estatelens.onrender.com/api/health
+- **Host:** Render free web service (`render.yaml`). Atlas + LLM keys are dashboard
+  env vars (`sync: false`). Local run is in the root [README](../README.md).
 
 ### Atlas connection-string note
 The provided Atlas URI carried an unescaped `@` in the password, which

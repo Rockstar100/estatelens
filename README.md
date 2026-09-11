@@ -6,6 +6,7 @@ Ask in chat — answers come only from scraped MongoDB records, with `[E#]` cita
 
 > Independent demo. Not affiliated with DarGlobal or Wasalt.
 
+**Live:** [estatelens.onrender.com](https://estatelens.onrender.com/)  
 **Repo:** [github.com/Rockstar100/estatelens](https://github.com/Rockstar100/estatelens)
 
 ---
