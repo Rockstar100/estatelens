@@ -58,7 +58,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "HEAD", "OPTIONS"],
     allow_headers=["Content-Type", "X-Request-Id"],
 )
 
@@ -135,7 +135,7 @@ async def api_root() -> dict:
 if STATIC_DIR is not None:
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
-    @app.get("/{full_path:path}")
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
     async def spa(full_path: str):
         if full_path.startswith("api/"):
             return JSONResponse({"detail": "Not found"}, status_code=404)
@@ -144,7 +144,7 @@ if STATIC_DIR is not None:
             return FileResponse(candidate)
         return FileResponse(STATIC_DIR / "index.html")
 else:
-    @app.get("/")
+    @app.api_route("/", methods=["GET", "HEAD"])
     async def no_frontend() -> dict:
         return {
             "name": "EstateLens API",

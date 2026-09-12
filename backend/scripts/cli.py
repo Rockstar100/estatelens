@@ -280,6 +280,8 @@ def backfill_images(
                     console.print(f"[dim]no image[/dim] {prop.title[:50]}")
                     continue
                 prop.image_url = img
+                if img not in prop.image_urls:
+                    prop.image_urls = [img] + list(prop.image_urls or [])
                 await repo.upsert_property(prop)
                 updated += 1
                 console.print(f"[green]ok[/green] {prop.title[:50]}")

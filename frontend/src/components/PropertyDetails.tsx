@@ -66,20 +66,29 @@ export function PropertyDetails({ propertyId, seed, onClose, onAsk }: Props) {
         {prop && (
           <>
             <div className="overflow-hidden rounded-[12px] border border-[var(--color-line)] bg-[var(--color-surface-muted)]">
-              <img
-                src={`/api/properties/${encodeURIComponent(prop.id)}/image`}
-                alt=""
-                className="aspect-[16/10] w-full object-cover"
-                onError={(e) => {
-                  const el = e.currentTarget as HTMLImageElement;
-                  el.style.display = "none";
-                  const fallback = el.nextElementSibling as HTMLElement | null;
-                  if (fallback) fallback.style.display = "flex";
-                }}
-              />
-              <div className="flex aspect-[16/10] items-center justify-center" style={{ display: "none" }}>
-                <Building2 className="size-10 text-[var(--color-line)]" />
-              </div>
+              {prop.image_url ? (
+                <>
+                  <img
+                    src={`/api/properties/${encodeURIComponent(prop.id)}/image`}
+                    alt=""
+                    className="aspect-[16/10] w-full object-cover"
+                    onError={(e) => {
+                      const el = e.currentTarget as HTMLImageElement;
+                      el.style.display = "none";
+                      const fallback = el.nextElementSibling as HTMLElement | null;
+                      if (fallback) fallback.style.display = "flex";
+                    }}
+                  />
+                  <div className="hidden aspect-[16/10] items-center justify-center" style={{ display: "none" }}>
+                    <Building2 className="size-10 text-[var(--color-line)]" />
+                  </div>
+                </>
+              ) : (
+                <div className="flex aspect-[16/10] flex-col items-center justify-center gap-2 bg-[linear-gradient(145deg,#e8ebe6_0%,#f4f5f1_55%,#dde3dc_100%)]">
+                  <Building2 className="size-10 text-[color-mix(in_srgb,var(--color-accent)_30%,var(--color-line))]" />
+                  <span className="text-xs text-[var(--color-ink-soft)]">No photo in source</span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
