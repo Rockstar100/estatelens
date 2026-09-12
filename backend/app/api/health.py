@@ -15,12 +15,12 @@ from app.models.api import HealthResponse, ReadinessCheck, ReadinessResponse
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse)
 async def health() -> HealthResponse:
     return HealthResponse(version=__version__, time=datetime.now(timezone.utc))
 
 
-@router.get("/readiness", response_model=ReadinessResponse)
+@router.api_route("/readiness", methods=["GET", "HEAD"], response_model=ReadinessResponse)
 async def readiness(response: Response) -> ReadinessResponse:
     settings = get_settings()
     checks: list[ReadinessCheck] = []

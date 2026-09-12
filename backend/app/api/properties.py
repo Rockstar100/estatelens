@@ -135,7 +135,11 @@ def _safe_image_url(url: str | None) -> str | None:
 async def property_image(property_id: str):
     """Same-origin photo for cards. Looks up the live DB URL so chat history
     from before image backfill still renders, and proxies bytes so CDN / referrer
-    quirks cannot blank the thumbnails."""
+    quirks cannot blank the thumbnails.
+
+    When no usable cover exists, return a tiny SVG placeholder (200) instead of
+    404 so list views don't spam the logs with missing-photo noise.
+    """
     from fastapi.responses import Response
     import httpx
 
@@ -144,9 +148,32 @@ async def property_image(property_id: str):
     prop = await repo.get_property(property_id)
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
+
+    def _placeholder() -> Response:
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">'
+            '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+            '<stop offset="0%" stop-color="#e8ebe6"/><stop offset="100%" stop-color="#dde3dc"/>'
+            "</linearGradient></defs>"
+            '<rect width="640" height="400" fill="url(#g)"/>'
+            '<text x="320" y="210" text-anchor="middle" fill="#8a9488" '
+            'font-family="system-ui,sans-serif" font-size="18">No photo</text>'
+            "</svg>"
+        )
+        return Response(
+            content=svg.encode("utf-8"),
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
     url = _safe_image_url(prop.image_url)
+    if not url and prop.image_urls:
+        for candidate in prop.image_urls:
+            url = _safe_image_url(candidate)
+            if url:
+                break
     if not url:
-        raise HTTPException(status_code=404, detail="No image")
+        return _placeholder()
 
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
@@ -161,15 +188,15 @@ async def property_image(property_id: str):
                     "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
                 },
             )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"image fetch failed: {exc}") from exc
+    except Exception:  # noqa: BLE001
+        return _placeholder()
 
     if upstream.status_code != 200 or not upstream.content:
-        raise HTTPException(status_code=404, detail="image unavailable")
+        return _placeholder()
 
     ctype = upstream.headers.get("content-type", "image/jpeg")
     if not ctype.startswith("image/"):
-        raise HTTPException(status_code=404, detail="not an image")
+        return _placeholder()
 
     return Response(
         content=upstream.content,

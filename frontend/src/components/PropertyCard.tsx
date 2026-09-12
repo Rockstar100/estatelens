@@ -28,6 +28,8 @@ function PropertyThumb({
 }) {
   const [failed, setFailed] = useState(false);
   const label = p.property_type ? titleCase(p.property_type) : titleCase(p.record_type);
+  // Skip the round-trip when we already know there is no cover photo.
+  const hasCover = Boolean(p.image_url);
 
   return (
     <div className={cn("relative overflow-hidden bg-[var(--color-surface-muted)]", className)}>
@@ -37,7 +39,7 @@ function PropertyThumb({
           {label}
         </span>
       </div>
-      {!failed && (
+      {hasCover && !failed && (
         <img
           src={propertyImageSrc(p.id)}
           alt=""
